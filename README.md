@@ -101,7 +101,7 @@ npm install
 
 **Set Up Environment Variables**
 
-Copy the provided `.env.example` file to `.env.local` in the root of your project and fill in your credentials:
+Copy the provided `.env.example` file to `.env` in the root of your project and fill in your credentials:
 
 ```env
 VITE_TMDB_API_KEY=
