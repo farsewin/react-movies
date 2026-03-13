@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signup, loginEmailPassword, loginWithGoogle } from '../services/appwrite';
+import { signup, loginEmailPassword } from '../services/appwrite';
 
 const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -105,23 +105,6 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
             {isLoading ? 'Processing...' : isLogin ? 'Login' : 'Sign Up'}
           </button>
         </form>
-
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-light-100/10"></span>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-dark-100 px-2 text-light-200 font-bold tracking-widest">Or continue with</span>
-          </div>
-        </div>
-
-        <button
-          onClick={loginWithGoogle}
-          className="w-full bg-white text-black font-bold py-4 rounded-xl shadow-lg transition-all hover:scale-[1.02] flex items-center justify-center gap-3"
-        >
-          <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" alt="Google" className="size-6" />
-          Google
-        </button>
 
         <p className="mt-8 text-center text-light-200">
           {isLogin ? "Don't have an account? " : "Already have an account? "}

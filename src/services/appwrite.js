@@ -14,8 +14,6 @@ const client = new Client()
 const database = new Databases(client);
 const account = new Account(client);
 
-const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || window.location.origin;
-
 // --- Auth Services ---
 
 export const signup = async (email, password, name) => {
@@ -36,14 +34,6 @@ export const loginEmailPassword = async (email, password) => {
     console.error('Login error:', error);
     throw error;
   }
-};
-
-export const loginWithGoogle = () => {
-  account.createOAuth2Session(
-    'google',
-    REDIRECT_URI, // Success redirect
-    REDIRECT_URI  // Failure redirect
-  );
 };
 
 export const logout = async () => {
