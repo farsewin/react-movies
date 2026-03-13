@@ -12,7 +12,7 @@ const WatchParty = () => {
   const [party, setParty] = useState(null)
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
-  const { partyMembers } = useWatchParty(roomCode)
+  const { partyMembers, roomState } = useWatchParty(roomCode)
 
   useEffect(() => {
     const init = async () => {
@@ -86,7 +86,7 @@ const WatchParty = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
            <div className="lg:col-span-3">
-             <PartyPlayer movie={party} roomCode={roomCode} />
+             <PartyPlayer movie={party} roomCode={roomCode} user={user} roomState={roomState} />
            </div>
 
            <div className="lg:col-span-1">

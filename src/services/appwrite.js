@@ -79,7 +79,10 @@ export const createWatchParty = async (roomCode, movie) => {
         movie_title: movie.title,
         creator_id: user.$id,
         creator_name: user.name,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        playback_status: 'pause',
+        last_sync_time: 0,
+        last_sync_at: new Date().toISOString()
       }
     );
 
@@ -136,6 +139,26 @@ export const getWatchParty = async (roomCode) => {
   } catch (error) {
     console.error("Get party error:", error);
     return null;
+  }
+};
+
+export const syncRoomState = async (roomCode, playbackStatus, lastSyncTime) => {
+  try {
+    const party = await getWatchParty(roomCode);
+    if (!party) return;
+
+    await database.updateDocument(
+      DATABASE_ID,
+      WATCH_PARTIES_TABLE_ID,
+      party.$id,
+      {
+        playback_status: playbackStatus,
+        last_sync_time: Math.floor(lastSyncTime),
+        last_sync_at: new Date().toISOString()
+      }
+    );
+  } catch (error) {
+    console.error("Sync room state error:", error);
   }
 };
 
