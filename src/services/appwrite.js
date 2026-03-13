@@ -18,6 +18,26 @@ const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || window.location.origin
 
 // --- Auth Services ---
 
+export const signup = async (email, password, name) => {
+  try {
+    const user = await account.create(ID.unique(), email, password, name);
+    // Automatically log in after signup
+    return await loginEmailPassword(email, password);
+  } catch (error) {
+    console.error('Signup error:', error);
+    throw error;
+  }
+};
+
+export const loginEmailPassword = async (email, password) => {
+  try {
+    return await account.createEmailPasswordSession(email, password);
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
+};
+
 export const loginWithGoogle = () => {
   account.createOAuth2Session(
     'google',
