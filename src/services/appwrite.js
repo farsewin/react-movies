@@ -163,9 +163,11 @@ export const updateWatchProgress = async (movieId, watchedTime, duration) => {
       movieId: parseInt(movieId),
       progressPercentage,
       lastWatchedTimestamp: new Date().toISOString(),
-      watchStatus: progressPercentage >= 95 ? 'completed' : 'watching',
+      watchStatus: progressPercentage >= 95 ? 'completed' : 'inProgress',
       deviceType: 'web'
     };
+
+    console.log("Updating progress with data:", data);
 
     if (existing.total > 0) {
       await database.updateDocument(
@@ -183,7 +185,8 @@ export const updateWatchProgress = async (movieId, watchedTime, duration) => {
       );
     }
   } catch (error) {
-    console.error("Update progress error:", error);
+    console.error("Update progress error details:", error.response); // Get more info from Appwrite
+    console.error("Update progress total error:", error);
   }
 };
 
