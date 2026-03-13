@@ -1,8 +1,9 @@
 import React from 'react'
+import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
 
-const MovieCard = ({ movie:
-  { title, vote_average, poster_path, release_date, original_language }
-}) => {
+const MovieCard = ({ movie, user }) => {
+  const { title, vote_average, poster_path, release_date, original_language } = movie;
+
   return (
     <div className="movie-card">
       <img
@@ -28,6 +29,8 @@ const MovieCard = ({ movie:
             {release_date ? release_date.split('-')[0] : 'N/A'}
           </p>
         </div>
+
+        <WatchWithFriendsButton movie={movie} user={user} />
       </div>
     </div>
   )
