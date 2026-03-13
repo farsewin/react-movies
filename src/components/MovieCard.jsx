@@ -1,15 +1,26 @@
 import React from 'react'
 import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
 
-const MovieCard = ({ movie, user }) => {
-  const { title, vote_average, poster_path, release_date, original_language } = movie;
+const MovieCard = React.memo(({ movie, user }) => {
+  // TV Shows use 'name' and 'first_air_date', Movies use 'title' and 'release_date'
+  const title = movie.title || movie.name;
+  const date = movie.release_date || movie.first_air_date;
+  const { vote_average, poster_path, original_language, media_type } = movie;
 
   return (
-    <div className="movie-card">
+    <div className="movie-card relative group hover-lift">
+      {media_type && (
+        <span className="absolute top-4 right-4 z-10 bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg transform transition-transform group-hover:scale-105">
+          {media_type === 'movie' ? 'Movie' : 'TV Show'}
+        </span>
+      )}
+      
       <img
         src={poster_path ?
-          `https://image.tmdb.org/t/p/w500/${poster_path}` : '/no-movie.png'}
+          `https://image.tmdb.org/t/p/w342/${poster_path}` : '/no-movie.png'}
         alt={title}
+        loading="lazy"
+        className="transition-opacity duration-300"
       />
 
       <div className="mt-4">
@@ -26,13 +37,14 @@ const MovieCard = ({ movie, user }) => {
 
           <span>•</span>
           <p className="year">
-            {release_date ? release_date.split('-')[0] : 'N/A'}
+            {date ? date.split('-')[0] : 'N/A'}
           </p>
         </div>
 
-        <WatchWithFriendsButton movie={movie} user={user} />
+        <WatchWithFriendsButton movie={{ ...movie, title }} user={user} />
       </div>
     </div>
   )
-}
-export default MovieCard
+});
+
+export default MovieCard;

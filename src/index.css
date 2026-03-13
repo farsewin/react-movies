@@ -160,3 +160,20 @@
     display: none;
   }
 }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(0.98); }
+}
+
+.status-badge-pulse {
+  animation: pulse-soft 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.hover-lift {
+  @apply transition-transform duration-300 hover:-translate-y-1;
+}
+
+.glass-panel {
+  @apply bg-dark-100/80 backdrop-blur-md border border-light-100/10 shadow-xl;
+}

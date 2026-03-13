@@ -18,9 +18,10 @@ const API_OPTIONS = {
 }
 
 const Home = () => {
+  const [mediaType, setMediaType] = useState('movie'); // 'movie' or 'tv'
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchTerm, setSearchTerm] = useState('');
-  const [movieList, setMovieList] = useState([]);
+  const [mediaList, setMediaList] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [trendingMovies, setTrendingMovies] = useState([]);
@@ -29,24 +30,24 @@ const Home = () => {
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm])
 
-  const fetchMovies = async (query = '') => {
+  const fetchMedia = async (query = '') => {
     setIsLoading(true);
     setErrorMessage('');
     try {
       const endpoint = query
-        ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
+        ? `${API_BASE_URL}/search/${mediaType}?query=${encodeURIComponent(query)}`
+        : `${API_BASE_URL}/discover/${mediaType}?sort_by=popularity.desc`;
 
       const response = await fetch(endpoint, API_OPTIONS);
-      if(!response.ok) throw new Error('Failed to fetch movies');
+      if(!response.ok) throw new Error(`Failed to fetch ${mediaType === 'movie' ? 'movies' : 'TV shows'}`);
       const data = await response.json();
-      setMovieList(data.results || []);
+      setMediaList(data.results || []);
       if(query && data.results.length > 0) {
         await updateSearchCount(query, data.results[0]);
       }
     } catch (error) {
-      console.error(`Error fetching movies: ${error}`);
-      setErrorMessage('Error fetching movies. Please try again later.');
+      console.error(`Error fetching media: ${error}`);
+      setErrorMessage(`Error fetching ${mediaType === 'movie' ? 'movies' : 'TV shows'}. Please try again later.`);
     } finally {
       setIsLoading(false);
     }
@@ -71,8 +72,8 @@ const Home = () => {
   };
 
   useEffect(() => {
-    fetchMovies(debouncedSearchTerm);
-  }, [debouncedSearchTerm]);
+    fetchMedia(debouncedSearchTerm);
+  }, [debouncedSearchTerm, mediaType]);
 
   useEffect(() => {
     loadTrendingMovies();
@@ -106,7 +107,23 @@ const Home = () => {
 
         <header>
           <img src="/hero.png" alt="Hero Banner" />
-          <h1>Find <span className="text-gradient">Movies</span> You'll Enjoy Without the Hassle</h1>
+          <h1>Find <span className="text-gradient">{mediaType === 'movie' ? 'Movies' : 'TV Shows'}</span> You'll Enjoy Without the Hassle</h1>
+          
+          <div className="flex justify-center gap-4 mb-8 relative z-50">
+            <button 
+              onClick={() => setMediaType('movie')}
+              className={`px-8 py-3 rounded-full font-bold transition-all ${mediaType === 'movie' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'bg-dark-100/50 text-light-200 hover:text-white'}`}
+            >
+              Movies
+            </button>
+            <button 
+              onClick={() => setMediaType('tv')}
+              className={`px-8 py-3 rounded-full font-bold transition-all ${mediaType === 'tv' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'bg-dark-100/50 text-light-200 hover:text-white'}`}
+            >
+              TV Shows
+            </button>
+          </div>
+
           <Search searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </header>
 
@@ -125,15 +142,15 @@ const Home = () => {
         )}
 
         <section className="all-movies">
-          <h2>All Movies</h2>
+          <h2>{mediaType === 'movie' ? 'All Movies' : 'All TV Shows'}</h2>
           {isLoading ? (
             <Spinner />
           ) : errorMessage ? (
             <p className="text-red-500">{errorMessage}</p>
           ) : (
             <ul>
-              {movieList.map((movie) => (
-                <MovieCard key={movie.id} movie={movie} user={user} />
+              {mediaList.map((item) => (
+                <MovieCard key={item.id} movie={{ ...item, media_type: mediaType }} user={user} />
               ))}
             </ul>
           )}

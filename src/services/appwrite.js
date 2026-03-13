@@ -72,7 +72,10 @@ export const createWatchParty = async (roomCode, movie) => {
         created_at: new Date().toISOString(),
         playback_status: 'pause',
         last_sync_time: 0,
-        last_sync_at: new Date().toISOString()
+        last_sync_at: new Date().toISOString(),
+        media_type: movie.media_type || 'movie',
+        season: movie.season || 1,
+        episode: movie.episode || 1
       }
     );
 
@@ -151,20 +154,32 @@ export const getWatchParty = async (roomCode) => {
   }
 };
 
-export const syncRoomState = async (roomCode, playbackStatus, lastSyncTime) => {
+export const syncRoomState = async (roomIdentifier, playbackStatus, lastSyncTime, tvMeta = {}) => {
   try {
-    const party = await getWatchParty(roomCode);
-    if (!party) return;
+    let documentId = roomIdentifier;
+
+    // If identifier is a room code (roughly 6-8 chars), we need to find the document ID
+    if (roomIdentifier.length < 15) {
+      const party = await getWatchParty(roomIdentifier);
+      if (!party) return;
+      documentId = party.$id;
+    }
+
+    const data = {
+      playback_status: playbackStatus,
+      last_sync_time: Math.floor(lastSyncTime),
+      last_sync_at: new Date().toISOString()
+    };
+
+    if (tvMeta.season !== undefined) data.season = tvMeta.season;
+    if (tvMeta.episode !== undefined) data.episode = tvMeta.episode;
+    if (tvMeta.custom_subtitle_url !== undefined) data.custom_subtitle_url = tvMeta.custom_subtitle_url;
 
     await database.updateDocument(
       DATABASE_ID,
       WATCH_PARTIES_TABLE_ID,
-      party.$id,
-      {
-        playback_status: playbackStatus,
-        last_sync_time: Math.floor(lastSyncTime),
-        last_sync_at: new Date().toISOString()
-      }
+      documentId,
+      data
     );
   } catch (error) {
     console.error("Sync room state error:", error);
@@ -173,7 +188,7 @@ export const syncRoomState = async (roomCode, playbackStatus, lastSyncTime) => {
 
 // --- Progress Tracking ---
 
-export const updateWatchProgress = async (movieId, watchedTime, duration) => {
+export const updateWatchProgress = async (movieId, watchedTime, duration, tvMeta = {}) => {
   try {
     const user = await getCurrentUser();
     if (!user) return;
@@ -185,7 +200,7 @@ export const updateWatchProgress = async (movieId, watchedTime, duration) => {
       DATABASE_ID,
       WATCH_PROGRESS_TABLE_ID,
       [
-        Query.equal('userId', user.$id), // Note: This will fail if userId is Integer in DB but String in user.$id
+        Query.equal('userId', user.$id),
         Query.equal('movieId', parseInt(movieId))
       ]
     );
@@ -196,7 +211,10 @@ export const updateWatchProgress = async (movieId, watchedTime, duration) => {
       progressPercentage,
       lastWatchedTimestamp: new Date().toISOString(),
       watchStatus: progressPercentage >= 95 ? 'completed' : 'inProgress',
-      deviceType: 'web'
+      deviceType: 'web',
+      media_type: tvMeta.media_type || 'movie',
+      season: tvMeta.season || 1,
+      episode: tvMeta.episode || 1
     };
 
     console.log("Updating progress with data:", data);
