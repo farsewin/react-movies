@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getWatchParty, getCurrentUser } from '../services/appwrite'
+import { getWatchParty, getCurrentUser, joinWatchParty } from '../services/appwrite'
 import { useWatchParty } from '../hooks/useWatchParty'
 import Spinner from '../components/Spinner'
 import PartyPlayer from '../components/PartyPlayer'
@@ -32,6 +32,9 @@ const WatchParty = () => {
 
         setUser(usr)
         setParty(prty)
+
+        // Automatically join the party if logged in
+        await joinWatchParty(roomCode, usr, usr.$id === prty.creator_id);
       } catch (error) {
         console.error("Init Error:", error)
       } finally {

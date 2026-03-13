@@ -95,11 +95,30 @@ export const joinWatchParty = async (roomCode, user, isCreator = false) => {
       [Query.equal('party_id', roomCode)]
     );
 
-    if (existingMembers.total >= 20 && !isCreator) {
+    // 1. Check if already a member
+    const existing = await database.listDocuments(
+      DATABASE_ID,
+      PARTY_MEMBERS_TABLE_ID,
+      [
+        Query.equal('party_id', roomCode),
+        Query.equal('user_id', user.$id)
+      ]
+    );
+
+    if (existing.total > 0) return existing.documents[0];
+
+    // 2. Check member limit (20)
+    const membersCount = await database.listDocuments(
+      DATABASE_ID,
+      PARTY_MEMBERS_TABLE_ID,
+      [Query.equal('party_id', roomCode)]
+    );
+
+    if (membersCount.total >= 20 && !isCreator) {
       throw new Error("Room is full (max 20 members)");
     }
 
-    // 2. Add member
+    // 3. Add member
     return await database.createDocument(
       DATABASE_ID,
       PARTY_MEMBERS_TABLE_ID,
