@@ -14,13 +14,15 @@ const client = new Client()
 const database = new Databases(client);
 const account = new Account(client);
 
+const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || window.location.origin;
+
 // --- Auth Services ---
 
 export const loginWithGoogle = () => {
   account.createOAuth2Session(
     'google',
-    window.location.origin, // Success redirect
-    window.location.origin  // Failure redirect
+    REDIRECT_URI, // Success redirect
+    REDIRECT_URI  // Failure redirect
   );
 };
 
