@@ -1,3 +1,4 @@
+import React, { useEffect, useRef, useState } from 'react';
 import { updateWatchProgress, syncRoomState } from '../services/appwrite';
 
 const vidfastOrigins = [
@@ -147,16 +148,6 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
         )}
       </div>
 
-      {/* On-Screen Debug Logs */}
-      {isHost && (
-        <div className="absolute bottom-4 left-4 z-20 bg-black/80 backdrop-blur text-green-400 font-mono text-[10px] p-2 rounded border border-green-500/30 max-w-sm pointer-events-none">
-          <p className="border-b border-green-500/30 mb-1 pb-1 font-bold text-white">Event Logs</p>
-          {debugLogs.length === 0 ? <p className="opacity-50">Waiting for events...</p> : null}
-          {debugLogs.map((log, i) => (
-            <div key={i} className="truncate">{log}</div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

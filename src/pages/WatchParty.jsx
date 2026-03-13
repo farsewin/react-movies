@@ -122,7 +122,7 @@ const WatchParty = () => {
   }
 
   return (
-    <main className="bg-primary min-h-screen text-white p-5 lg:p-10 relative overflow-hidden">
+    <main className="bg-primary min-h-screen text-white p-5 lg:p-0 relative overflow-hidden">
       <div className="pattern opacity-30" />
       
       <div className="max-w-7xl mx-auto relative z-10">
