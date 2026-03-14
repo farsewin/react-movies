@@ -40,6 +40,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const lastStateRef = useRef(null);      // Tracks last playback_status we reacted to
   const lastOutgoingSyncTimeRef = useRef(0); // For Host grace period
   const [showControls, setShowControls] = useState(true);
+  const [isChatVisible, setIsChatVisible] = useState(true);
   const controlsTimeoutRef = useRef(null);
   
   // Mobile Detection
@@ -230,12 +231,22 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </div>
 
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsChatVisible(!isChatVisible)}
+            className={`transition-all hover:scale-110 active:scale-95 flex items-center justify-center ${isChatVisible ? 'text-indigo-400' : 'text-white/40 hover:text-white'}`}
+            title={isChatVisible ? "Hide Chat" : "Show Chat"}
+          >
+            <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </button>
+
           <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
-             <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-             <span className="text-white font-black text-sm tracking-tighter">{(partyMembers?.length || 1)}</span>
-             <svg className="size-4 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-             </svg>
+            <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+            <span className="text-white font-black text-sm tracking-tighter">{(partyMembers?.length || 1)}</span>
+            <svg className="size-4 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
           </div>
         </div>
       </div>
@@ -288,11 +299,12 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </button>
       </div>
 
-      {/* Chat Overlay */}
-      <ChatOverlay 
-        roomCode={roomCode}
+      <ChatOverlay
+        messages={chatMessages}
+        roomDocId={roomDocId}
         user={user}
-        messages={chatMessages || []}
+        isCinematic={isCinematic}
+        isVisible={isChatVisible}
       />
 
     </div>
