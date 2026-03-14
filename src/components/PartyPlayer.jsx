@@ -17,6 +17,13 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   const lastSyncBroadcastRef = useRef(0);
   const viewerCurrentTimeRef = useRef(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [shouldLoadIframe, setShouldLoadIframe] = useState(false);
+
+  // Optimization: Delay iframe loading to prioritize UI paint
+  useEffect(() => {
+    const timer = setTimeout(() => setShouldLoadIframe(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Determine Player URL based on media type
   const isTV = (roomState?.media_type || movie?.media_type) === 'tv';
@@ -117,16 +124,22 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
   return (
     <div className="relative aspect-video rounded-2xl overflow-hidden border border-light-100/10 shadow-2xl bg-black">
-      <iframe
-        ref={iframeRef}
-        id="party-player-iframe"
-        src={playerURL}
-        className="absolute inset-0 w-full h-full"
-        allowFullScreen
-        allow="autoplay; encrypted-media"
-        title="Media Player"
-        frameBorder="0"
-      />
+      {shouldLoadIframe ? (
+        <iframe
+          ref={iframeRef}
+          id="party-player-iframe"
+          src={playerURL}
+          className="absolute inset-0 w-full h-full"
+          allowFullScreen
+          allow="autoplay; encrypted-media"
+          title="Media Player"
+          frameBorder="0"
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="size-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+        </div>
+      )}
 
       <div className="absolute top-4 left-4 z-20 flex gap-2">
         {isHost ? (

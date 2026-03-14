@@ -1,7 +1,7 @@
 import React from 'react'
 import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
 
-const MovieCard = React.memo(({ movie, user }) => {
+const MovieCard = React.memo(({ movie }) => {
   // TV Shows use 'name' and 'first_air_date', Movies use 'title' and 'release_date'
   const title = movie.title || movie.name;
   const date = movie.release_date || movie.first_air_date;
@@ -16,11 +16,10 @@ const MovieCard = React.memo(({ movie, user }) => {
       )}
       
       <img
-        src={poster_path ?
-          `https://image.tmdb.org/t/p/w342/${poster_path}` : '/no-movie.png'}
-        alt={title}
+        src={movie.poster_path ? `https://image.tmdb.org/t/p/w342/${movie.poster_path}` : '/no-movie.png'}
+        alt={movie.title}
+        className="w-full aspect-[2/3] rounded-2xl object-cover"
         loading="lazy"
-        className="transition-opacity duration-300"
       />
 
       <div className="mt-4">
@@ -41,7 +40,7 @@ const MovieCard = React.memo(({ movie, user }) => {
           </p>
         </div>
 
-        <WatchWithFriendsButton movie={{ ...movie, title }} user={user} />
+        <WatchWithFriendsButton movie={{ ...movie, title }} />
       </div>
     </div>
   )

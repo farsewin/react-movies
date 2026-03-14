@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import Search from '../components/Search.jsx'
 import Spinner from '../components/Spinner.jsx'
 import MovieCard from '../components/MovieCard.jsx'
+import { MovieCardSkeleton, TrendingSkeleton } from '../components/Skeleton.jsx'
 import AuthModal from '../components/AuthModal.jsx'
 import { useDebounce } from 'react-use'
-import { getTrendingMovies, updateSearchCount, getCurrentUser, logout } from '../services/appwrite.js'
+import { getTrendingMovies, updateSearchCount, logout } from '../services/appwrite.js'
+import { useUser } from '../context/UserContext.jsx'
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -18,6 +20,7 @@ const API_OPTIONS = {
 }
 
 const Home = () => {
+  const { user, refreshUser } = useUser();
   const [mediaType, setMediaType] = useState('movie'); // 'movie' or 'tv'
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,7 +28,6 @@ const Home = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [trendingMovies, setTrendingMovies] = useState([]);
-  const [user, setUser] = useState(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm])
@@ -63,12 +65,12 @@ const Home = () => {
   }
 
   const handleAuthSuccess = () => {
-    getCurrentUser().then(setUser);
+    refreshUser();
   };
-
+ 
   const handleLogout = async () => {
     await logout();
-    setUser(null);
+    refreshUser();
   };
 
   useEffect(() => {
@@ -77,7 +79,6 @@ const Home = () => {
 
   useEffect(() => {
     loadTrendingMovies();
-    getCurrentUser().then(setUser);
   }, []);
 
   return (
@@ -127,7 +128,7 @@ const Home = () => {
           <Search searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </header>
 
-        {trendingMovies && trendingMovies.length > 0 && (
+        {trendingMovies && trendingMovies.length > 0 ? (
           <section className="trending">
             <h2>Trending Movies</h2>
             <ul>
@@ -139,18 +140,24 @@ const Home = () => {
               ))}
             </ul>
           </section>
+        ) : (
+          <TrendingSkeleton />
         )}
 
         <section className="all-movies">
           <h2>{mediaType === 'movie' ? 'All Movies' : 'All TV Shows'}</h2>
           {isLoading ? (
-            <Spinner />
+            <ul>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <MovieCardSkeleton key={i} />
+              ))}
+            </ul>
           ) : errorMessage ? (
             <p className="text-red-500">{errorMessage}</p>
           ) : (
             <ul>
               {mediaList.map((item) => (
-                <MovieCard key={item.id} movie={{ ...item, media_type: mediaType }} user={user} />
+                <MovieCard key={item.id} movie={{ ...item, media_type: mediaType }} />
               ))}
             </ul>
           )}

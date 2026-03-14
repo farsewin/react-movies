@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getWatchParty, getCurrentUser, joinWatchParty, syncRoomState } from '../services/appwrite'
+import { getWatchParty, joinWatchParty, syncRoomState } from '../services/appwrite'
 import { useWatchParty } from '../hooks/useWatchParty'
+import { useUser } from '../context/UserContext.jsx'
 import Spinner from '../components/Spinner'
+import { PlayerSkeleton } from '../components/Skeleton'
 import PartyPlayer from '../components/PartyPlayer'
 import PartyMembers from '../components/PartyMembers'
 
@@ -10,10 +12,10 @@ const API_BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
 const WatchParty = () => {
+  const { user, isLoading: isUserLoading } = useUser()
   const { roomCode } = useParams()
   const navigate = useNavigate()
   const [party, setParty] = useState(null)
-  const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [totalEpisodes, setTotalEpisodes] = useState(null);
   const { partyMembers, roomState } = useWatchParty(roomCode)
@@ -74,37 +76,46 @@ const WatchParty = () => {
   }, [roomState?.movie_id, party?.movie_id, roomState?.season, party?.season, roomState?.media_type, party?.media_type]);
 
   useEffect(() => {
-    const init = async () => {
+    const fetchParty = async () => {
       try {
-        const [usr, prty] = await Promise.all([
-          getCurrentUser(),
-          getWatchParty(roomCode)
-        ])
-
-        if (!usr) return;
-
+        const prty = await getWatchParty(roomCode);
         if (!prty) {
-          alert("Party not found")
-          navigate("/")
-          return
+          alert("Party not found");
+          navigate("/");
+          return;
         }
-
-        setUser(usr)
-        setParty(prty)
-
-        // Automatically join the party if logged in
-        await joinWatchParty(roomCode, usr, usr.$id === prty.creator_id);
+        setParty(prty);
       } catch (error) {
-        console.error("Init Error:", error)
+        console.error("Fetch Party Error:", error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    init()
-  }, [roomCode, navigate])
+    fetchParty();
+  }, [roomCode, navigate]);
 
-  if (isLoading) return <div className="min-h-screen bg-primary flex items-center justify-center"><Spinner /></div>
+  useEffect(() => {
+    const joinRoom = async () => {
+      if (isUserLoading || !user || !party) return;
+      
+      try {
+        await joinWatchParty(roomCode, user, user.$id === party.creator_id);
+      } catch (error) {
+        console.error("Join Error:", error);
+      }
+    };
+
+    joinRoom();
+  }, [roomCode, user, party, isUserLoading]);
+
+  if (isLoading) return (
+    <main className="bg-primary min-h-screen text-white p-5 lg:p-0 flex flex-col items-center justify-center">
+      <div className="max-w-7xl w-full mx-auto p-5">
+        <PlayerSkeleton />
+      </div>
+    </main>
+  );
 
   if (!user) {
     return (

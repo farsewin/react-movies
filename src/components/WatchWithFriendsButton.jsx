@@ -2,9 +2,11 @@ import React, { useState } from 'react'
 import { createWatchParty } from '../services/appwrite'
 import { generateRoomCode } from '../utils/roomCode'
 import { useNavigate } from 'react-router-dom'
+import { useUser } from '../context/UserContext.jsx'
 import Spinner from './Spinner'
 
-const WatchWithFriendsButton = ({ movie, user }) => {
+const WatchWithFriendsButton = ({ movie }) => {
+  const { user } = useUser()
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
 
