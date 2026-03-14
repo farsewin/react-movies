@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { updateWatchProgress, syncRoomState } from '../services/appwrite';
+import ChatOverlay from './ChatOverlay';
 
 const vidfastOrigins = [
   "https://vidfast.pro",
@@ -11,8 +12,25 @@ const vidfastOrigins = [
   "https://vidfast.xyz"
 ];
 
-const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode, displayedEpisode, onLocalEpisodeChange, onNativeNavigation }) => {
+const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, localEpisode, displayedEpisode, onLocalEpisodeChange, onNativeNavigation, chatMessages, partyMembers, isCinematic, onLeaveParty }, ref) => {
   const iframeRef = useRef(null);
+  const containerRef = useRef(null);
+  
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    toggleFullscreen
+  }));
+
   const isHost = user?.$id === movie?.creator_id && !!movie?.creator_id;
   const lastSyncBroadcastRef = useRef(0);
   const viewerCurrentTimeRef = useRef(0);
@@ -21,6 +39,8 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   const lastSentCommandRef = useRef(null); // Tracks last command sent to iframe to avoid redundancy
   const lastStateRef = useRef(null);      // Tracks last playback_status we reacted to
   const lastOutgoingSyncTimeRef = useRef(0); // For Host grace period
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimeoutRef = useRef(null);
   
   // Mobile Detection
   const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
@@ -29,6 +49,29 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   useEffect(() => {
     const timer = setTimeout(() => setShouldLoadIframe(true), 500);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Handle Mouse Activity for Top Bar
+  useEffect(() => {
+    const handleActivity = () => {
+      setShowControls(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = setTimeout(() => {
+        if (isCinematic || document.fullscreenElement) setShowControls(false);
+      }, 3000);
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('mousemove', handleActivity);
+      container.addEventListener('touchstart', handleActivity);
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('mousemove', handleActivity);
+        container.removeEventListener('touchstart', handleActivity);
+      }
+    };
   }, []);
 
   // Determine Player URL - use localEpisode to prevent reloads on native 'next' navigation
@@ -160,7 +203,43 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   }, [roomState, isHost]);
 
   return (
-    <div className="relative aspect-video rounded-2xl overflow-hidden border border-light-100/10 shadow-2xl bg-black">
+    <div ref={containerRef} className={`relative overflow-hidden bg-black group/player transition-all duration-300 ${isCinematic ? 'w-full h-full' : 'aspect-video rounded-2xl border border-light-100/10 shadow-2xl'}`}>
+      {/* Cinematic Top Bar */}
+      <div className={`absolute top-0 inset-x-0 z-50 bg-linear-to-b from-black/90 via-black/40 to-transparent p-6 flex items-center justify-between transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onLeaveParty}
+            className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all hover:scale-110 active:scale-90"
+          >
+            <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(roomCode);
+              alert("Room Code Copied!");
+            }}
+            className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-light-200 transition-all hover:scale-105 active:scale-95 border border-white/5 flex items-center gap-2"
+          >
+            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+            <span className="font-mono text-sm uppercase tracking-tighter hidden sm:block">{roomCode}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
+             <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+             <span className="text-white font-black text-sm tracking-tighter">{(partyMembers?.length || 1)}</span>
+             <svg className="size-4 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+             </svg>
+          </div>
+        </div>
+      </div>
+
       {shouldLoadIframe ? (
         <iframe
           ref={iframeRef}
@@ -178,7 +257,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
         </div>
       )}
 
-      <div className="absolute top-4 left-4 z-20 flex gap-2">
+      <div className="absolute bottom-4 left-4 z-20 flex gap-2">
         {isHost ? (
           <div className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
             <span className="size-1.5 bg-white rounded-full" />
@@ -196,10 +275,28 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
             S{season} : E{uiEpisode}
           </div>
         )}
+
+        <button 
+           onClick={toggleFullscreen}
+           className="px-3 py-1 bg-white/5 hover:bg-white/10 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-white/10 shadow-lg transition-all hover:scale-105 active:scale-95"
+           title="Toggle Cinematic Fullscreen"
+        >
+          <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+          Fullscreen
+        </button>
       </div>
+
+      {/* Chat Overlay */}
+      <ChatOverlay 
+        roomCode={roomCode}
+        user={user}
+        messages={chatMessages || []}
+      />
 
     </div>
   );
-};
+});
 
 export default PartyPlayer;

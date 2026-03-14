@@ -1,11 +1,18 @@
 import React from 'react'
+import { useCreateParty } from '../hooks/useCreateParty'
 import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
 
 const MovieCard = React.memo(({ movie }) => {
+  const { handleCreateParty, isCreating } = useCreateParty();
   // TV Shows use 'name' and 'first_air_date', Movies use 'title' and 'release_date'
   const title = movie.title || movie.name;
   const date = movie.release_date || movie.first_air_date;
   const { vote_average, poster_path, original_language, media_type } = movie;
+
+  const onCardClick = (e) => {
+    e.preventDefault();
+    handleCreateParty(movie);
+  };
 
   return (
     <div className="movie-card relative group hover-lift">
@@ -15,15 +22,24 @@ const MovieCard = React.memo(({ movie }) => {
         </span>
       )}
       
-      <img
-        src={movie.poster_path ? `https://image.tmdb.org/t/p/w342/${movie.poster_path}` : '/no-movie.png'}
-        alt={movie.title}
-        className="w-full aspect-[2/3] rounded-2xl object-cover"
-        loading="lazy"
-      />
+      <div onClick={onCardClick} className="cursor-pointer relative overflow-hidden rounded-2xl">
+        <img
+          src={movie.poster_path ? `https://image.tmdb.org/t/p/w342/${movie.poster_path}` : '/no-movie.png'}
+          alt={title}
+          className="w-full aspect-[2/3] object-cover transition-transform duration-500 group-hover:scale-110"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+           <div className="bg-indigo-600 p-4 rounded-full scale-75 group-hover:scale-100 transition-transform duration-300">
+              <svg className="size-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+              </svg>
+           </div>
+        </div>
+      </div>
 
       <div className="mt-4">
-        <h3>{title}</h3>
+        <h3 className="cursor-pointer hover:text-indigo-400 transition-colors" onClick={onCardClick}>{title}</h3>
 
         <div className="content">
           <div className="rating">

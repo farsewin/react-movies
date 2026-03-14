@@ -1,44 +1,19 @@
-import React, { useState } from 'react'
-import { createWatchParty } from '../services/appwrite'
-import { generateRoomCode } from '../utils/roomCode'
-import { useNavigate } from 'react-router-dom'
-import { useUser } from '../context/UserContext.jsx'
-import Spinner from './Spinner'
+import { useCreateParty } from '../hooks/useCreateParty'
 
 const WatchWithFriendsButton = ({ movie }) => {
-  const { user } = useUser()
-  const [isLoading, setIsLoading] = useState(false)
-  const navigate = useNavigate()
-
-  const handleCreateParty = async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (!user) {
-      alert("Please login to start a watch party!")
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const roomCode = generateRoomCode()
-      await createWatchParty(roomCode, movie)
-      navigate(`/party/${roomCode}`)
-    } catch (error) {
-      console.error("Failed to create party:", error)
-      alert("Could not create watch party. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const { handleCreateParty, isCreating } = useCreateParty();
 
   return (
     <button
-      onClick={handleCreateParty}
-      disabled={isLoading}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCreateParty(movie);
+      }}
+      disabled={isCreating}
       className="mt-4 w-full bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/50 py-2 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
     >
-      {isLoading ? (
+      {isCreating ? (
         <span className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
       ) : (
         <>

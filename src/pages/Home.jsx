@@ -20,8 +20,11 @@ const API_OPTIONS = {
   }
 }
 
+import { useCreateParty } from '../hooks/useCreateParty'
+
 const Home = () => {
   const { user, refreshUser } = useUser();
+  const { handleCreateParty } = useCreateParty();
   const [mediaType, setMediaType] = useState('movie'); // 'movie' or 'tv'
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,9 +145,16 @@ const Home = () => {
             <h2>Trending Movies</h2>
             <ul>
               {trendingMovies.map((movie, index) => (
-                <li key={movie.$id}>
+                <li key={movie.$id} onClick={() => handleCreateParty({ ...movie, movie_id: movie.tmdb_id || movie.movie_id, media_type: 'movie' })} className="cursor-pointer group relative overflow-hidden rounded-xl">
                   <p>{index + 1}</p>
-                  <img src={movie.poster_url} alt={movie.title} />
+                  <img src={movie.poster_url} alt={movie.title} className="transition-transform duration-500 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                     <div className="bg-indigo-600 p-3 rounded-full scale-50 group-hover:scale-100 transition-transform duration-300">
+                        <svg className="size-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                        </svg>
+                     </div>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -39,7 +39,12 @@ const RoomCard = ({ room }) => {
     if (movie_id) fetchPoster();
   }, [poster_url, movie_id, media_type]);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch (err) {
+      console.warn("Fullscreen request failed:", err);
+    }
     navigate(`/party/${room_code}`);
   };
 

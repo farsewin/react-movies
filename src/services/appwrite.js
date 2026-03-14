@@ -6,6 +6,7 @@ const TABLE_ID = import.meta.env.VITE_APPWRITE_TABLE_ID;
 export const WATCH_PARTIES_TABLE_ID = import.meta.env.VITE_APPWRITE_WATCH_PARTIES_TABLE_ID;
 export const PARTY_MEMBERS_TABLE_ID = import.meta.env.VITE_APPWRITE_PARTY_MEMBERS_TABLE_ID;
 const WATCH_PROGRESS_TABLE_ID = import.meta.env.VITE_APPWRITE_WATCH_PROGRESS_TABLE_ID;
+export const PARTY_CHAT_TABLE_ID = import.meta.env.VITE_APPWRITE_PARTY_CHAT_TABLE_ID;
 
 const client = new Client()
   .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -215,6 +216,47 @@ export const getAvailableRooms = async () => {
     return response.documents;
   } catch (error) {
     console.error("Get available rooms error:", error);
+    return [];
+  }
+};
+
+// --- Chat Services ---
+
+export const sendChatMessage = async (roomCode, user, text) => {
+  try {
+    return await database.createDocument(
+      DATABASE_ID,
+      PARTY_CHAT_TABLE_ID,
+      ID.unique(),
+      {
+        party_id: roomCode,
+        user_id: user.$id,
+        username: user.name,
+        text,
+        timestamp: Date.now()
+      }
+    );
+  } catch (error) {
+    console.error("Send chat message error:", error);
+    throw error;
+  }
+};
+
+export const getChatMessages = async (roomCode) => {
+  try {
+    const response = await database.listDocuments(
+      DATABASE_ID,
+      PARTY_CHAT_TABLE_ID,
+      [
+        Query.equal('party_id', roomCode),
+        Query.orderDesc('timestamp'),
+        Query.limit(50)
+      ]
+    );
+    // Reverse to show oldest first in UI
+    return response.documents.reverse();
+  } catch (error) {
+    console.error("Get chat messages error:", error);
     return [];
   }
 };

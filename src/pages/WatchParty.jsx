@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getWatchParty, joinWatchParty, syncRoomState, deleteWatchParty } from '../services/appwrite'
 import { useWatchParty } from '../hooks/useWatchParty'
@@ -18,7 +18,7 @@ const WatchParty = () => {
   const [party, setParty] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [totalEpisodes, setTotalEpisodes] = useState(null);
-  const { partyMembers, roomState } = useWatchParty(roomCode)
+  const { partyMembers, roomState, chatMessages } = useWatchParty(roomCode)
   const isHost = user?.$id === party?.creator_id && !!party?.creator_id;
   
   // States to keep UI in sync while preventing iframe reloads
@@ -26,6 +26,16 @@ const WatchParty = () => {
   const [playerEpisode, setPlayerEpisode] = useState(1);       // For iframe src
   const [copySuccess, setCopySuccess] = useState(false);
   const [isSeasonLoading, setIsSeasonLoading] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
+  const playerRef = useRef(null);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   useEffect(() => {
     const ep = roomState?.episode || party?.episode || 1;
@@ -167,115 +177,121 @@ const WatchParty = () => {
     )
   }
 
+  const isCinematic = isFullscreen;
+
   return (
-    <main className="bg-primary min-h-screen text-white p-5 lg:p-0 relative overflow-hidden">
+    <main className={`bg-primary min-h-screen text-white p-5 lg:p-0 relative overflow-hidden ${isCinematic ? 'overflow-hidden' : ''}`}>
       <div className="pattern opacity-30" />
       
-      <div className="max-w-7xl mx-auto relative z-10">
-        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="w-full md:w-auto">
-              <button 
-                onClick={() => navigate("/")} 
-                className="text-light-200 hover:text-white mb-4 flex items-center gap-2 group transition-colors text-sm"
-              >
-                <span className="group-hover:-translate-x-1 transition-transform">←</span> Back
-              </button>
-              <h1 className="text-left text-2xl sm:text-4xl md:text-5xl mx-0 mb-2 font-black tracking-tight leading-tight">{party?.movie_title}</h1>
-              <p className="text-indigo-400 text-sm font-medium flex items-center gap-2">
-                <span className="size-2 bg-indigo-400 rounded-full animate-pulse" />
-                Hosted by {party?.creator_name}
-              </p>
-            </div>
-            <div className="w-full md:w-auto glass-panel px-4 sm:px-6 py-3 rounded-2xl shadow-xl flex items-center justify-between sm:justify-start gap-4 sm:gap-6">
-               {(party?.media_type === 'tv' || roomState?.media_type === 'tv') && user?.$id === party?.creator_id && (
-                 <div className="flex items-center gap-3 border-r border-light-100/10 pr-4 sm:pr-6">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-light-200 uppercase font-bold">Season</span>
-                      <input 
-                        type="number" 
-                        min="1" 
-                        value={roomState?.season || party?.season || 1} 
-                        onChange={(e) => syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'pause', roomState?.last_sync_time || 0, { season: parseInt(e.target.value), episode: roomState?.episode || party?.episode || 1 })}
-                        className="bg-transparent text-white font-bold w-12 focus:outline-hidden"
-                      />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-light-200 uppercase font-bold">
-                        Episode {totalEpisodes ? `/ ${totalEpisodes}` : ''}
-                      </span>
-                      <div className="flex items-center gap-2">
+      <div className={`max-w-7xl mx-auto relative z-10 ${isCinematic ? 'max-w-none' : ''}`}>
+        {!isCinematic && (
+          <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="w-full md:w-auto">
+                <button 
+                  onClick={() => navigate("/")} 
+                  className="text-light-200 hover:text-white mb-4 flex items-center gap-2 group transition-colors text-sm"
+                >
+                  <span className="group-hover:-translate-x-1 transition-transform">←</span> Back
+                </button>
+                <h1 className="text-left text-2xl sm:text-4xl md:text-5xl mx-0 mb-2 font-black tracking-tight leading-tight">{party?.movie_title}</h1>
+                <p className="text-indigo-400 text-sm font-medium flex items-center gap-2">
+                  <span className="size-2 bg-indigo-400 rounded-full animate-pulse" />
+                  Hosted by {party?.creator_name}
+                </p>
+              </div>
+              <div className="w-full md:w-auto glass-panel px-4 sm:px-6 py-3 rounded-2xl shadow-xl flex items-center justify-between sm:justify-start gap-4 sm:gap-6">
+                 {(party?.media_type === 'tv' || roomState?.media_type === 'tv') && user?.$id === party?.creator_id && (
+                   <div className="flex items-center gap-3 border-r border-light-100/10 pr-4 sm:pr-6">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-light-200 uppercase font-bold">Season</span>
                         <input 
                           type="number" 
                           min="1" 
-                          max={totalEpisodes || 100}
-                          value={displayedEpisode} 
-                          onChange={(e) => {
-                            const newEp = parseInt(e.target.value);
-                            setDisplayedEpisode(newEp);
-                            setPlayerEpisode(newEp);
-                            syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'pause', roomState?.last_sync_time || 0, { season: roomState?.season || party?.season || 1, episode: newEp });
-                          }}
+                          value={roomState?.season || party?.season || 1} 
+                          onChange={(e) => syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'pause', roomState?.last_sync_time || 0, { season: parseInt(e.target.value), episode: roomState?.episode || party?.episode || 1 })}
                           className="bg-transparent text-white font-bold w-12 focus:outline-hidden"
                         />
-                        <button 
-                          onClick={() => {
-                            if (totalEpisodes && displayedEpisode >= totalEpisodes) return;
-                            const newEp = displayedEpisode + 1;
-                            setDisplayedEpisode(newEp);
-                            setPlayerEpisode(newEp);
-                            syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'play', 0, { season: roomState?.season || party?.season || 1, episode: newEp });
-                          }}
-                          disabled={totalEpisodes ? displayedEpisode >= totalEpisodes : false}
-                          className={`bg-indigo-600/30 hover:bg-indigo-600 text-indigo-400 hover:text-white px-2 py-0.5 rounded text-[10px] font-bold transition-all ${totalEpisodes && displayedEpisode >= totalEpisodes ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          NEXT →
-                        </button>
                       </div>
-                    </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-light-200 uppercase font-bold">
+                          Episode {totalEpisodes ? `/ ${totalEpisodes}` : ''}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max={totalEpisodes || 100}
+                            value={displayedEpisode} 
+                            onChange={(e) => {
+                              const newEp = parseInt(e.target.value);
+                              setDisplayedEpisode(newEp);
+                              setPlayerEpisode(newEp);
+                              syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'pause', roomState?.last_sync_time || 0, { season: roomState?.season || party?.season || 1, episode: newEp });
+                            }}
+                            className="bg-transparent text-white font-bold w-12 focus:outline-hidden"
+                          />
+                          <button 
+                            onClick={() => {
+                              if (totalEpisodes && displayedEpisode >= totalEpisodes) return;
+                              const newEp = displayedEpisode + 1;
+                              setDisplayedEpisode(newEp);
+                              setPlayerEpisode(newEp);
+                              syncRoomState(party?.$id || roomCode, roomState?.playback_status || 'play', 0, { season: roomState?.season || party?.season || 1, episode: newEp });
+                            }}
+                            disabled={totalEpisodes ? displayedEpisode >= totalEpisodes : false}
+                            className={`bg-indigo-600/30 hover:bg-indigo-600 text-indigo-400 hover:text-white px-2 py-0.5 rounded text-[10px] font-bold transition-all ${totalEpisodes && displayedEpisode >= totalEpisodes ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            NEXT →
+                          </button>
+                        </div>
+                      </div>
+                   </div>
+                 )}
+                  <div className="flex flex-col shrink-0">
+                   <p className="text-[10px] text-light-200 uppercase tracking-widest mb-0.5 font-bold">Room Code</p>
+                   <div className="flex items-center gap-2">
+                     <span className="font-mono text-xl sm:text-2xl font-bold text-indigo-400 tracking-tighter">{roomCode}</span>
+                     <button 
+                      onClick={handleCopyCode}
+                      className={`p-1.5 rounded-lg transition-all ${copySuccess ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-light-200 hover:bg-white/10 hover:text-white'}`}
+                      title="Copy Room Code"
+                     >
+                       {copySuccess ? (
+                         <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                         </svg>
+                       ) : (
+                         <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                         </svg>
+                       )}
+                     </button>
+                   </div>
                  </div>
-               )}
-                <div className="flex flex-col shrink-0">
-                 <p className="text-[10px] text-light-200 uppercase tracking-widest mb-0.5 font-bold">Room Code</p>
-                 <div className="flex items-center gap-2">
-                   <span className="font-mono text-xl sm:text-2xl font-bold text-indigo-400 tracking-tighter">{roomCode}</span>
-                   <button 
-                    onClick={handleCopyCode}
-                    className={`p-1.5 rounded-lg transition-all ${copySuccess ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-light-200 hover:bg-white/10 hover:text-white'}`}
-                    title="Copy Room Code"
-                   >
-                     {copySuccess ? (
-                       <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                       </svg>
-                     ) : (
-                       <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                       </svg>
-                     )}
-                   </button>
-                 </div>
-               </div>
-               
-               <button 
-                 onClick={handleLeaveRoom}
-                 className="bg-white/5 hover:bg-red-500/20 text-light-200 hover:text-red-400 px-4 py-3 rounded-2xl transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2 font-bold text-xs"
-               >
-                 <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                 </svg>
-                 Leave Room
-               </button>
-            </div>
-        </header>
+                 
+                 <button 
+                   onClick={handleLeaveRoom}
+                   className="bg-white/5 hover:bg-red-500/20 text-light-200 hover:text-red-400 px-4 py-3 rounded-2xl transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2 font-bold text-xs"
+                 >
+                   <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                   </svg>
+                   Leave Room
+                 </button>
+              </div>
+          </header>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-           <div className="lg:col-span-3">
+        <div className={`grid grid-cols-1 ${isCinematic ? '' : 'lg:grid-cols-4 gap-8'}`}>
+           <div className={`${isCinematic ? 'fixed inset-0 z-[100] bg-black' : 'lg:col-span-3'}`}>
              <PartyPlayer 
+               ref={playerRef}
                movie={party} // Use stable initial party for static info (creator_id, etc.)
                roomCode={roomCode} 
                roomDocId={party?.$id}
                user={user} 
                roomState={roomState} // Dynamic room state for sync
+               chatMessages={chatMessages}
                displayedEpisode={displayedEpisode}
                localEpisode={playerEpisode}
                onLocalEpisodeChange={(ep) => {
@@ -290,9 +306,11 @@ const WatchParty = () => {
              />
            </div>
 
-           <div className="lg:col-span-1">
-             <PartyMembers members={partyMembers} />
-           </div>
+           {!isCinematic && (
+             <div className="lg:col-span-1">
+               <PartyMembers members={partyMembers} />
+             </div>
+           )}
         </div>
       </div>
     </main>
