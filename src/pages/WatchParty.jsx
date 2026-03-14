@@ -263,11 +263,11 @@ const WatchParty = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
            <div className="lg:col-span-3">
              <PartyPlayer 
-               movie={roomState || party} 
+               movie={party} // Use stable initial party for static info (creator_id, etc.)
                roomCode={roomCode} 
                roomDocId={party?.$id}
                user={user} 
-               roomState={roomState}
+               roomState={roomState} // Dynamic room state for sync
                displayedEpisode={displayedEpisode}
                localEpisode={playerEpisode}
                onLocalEpisodeChange={(ep) => {

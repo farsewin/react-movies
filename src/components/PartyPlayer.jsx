@@ -13,7 +13,7 @@ const vidfastOrigins = [
 
 const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode, displayedEpisode, onLocalEpisodeChange, onNativeNavigation }) => {
   const iframeRef = useRef(null);
-  const isHost = user?.$id === movie?.creator_id;
+  const isHost = user?.$id === movie?.creator_id && !!movie?.creator_id;
   const lastSyncBroadcastRef = useRef(0);
   const viewerCurrentTimeRef = useRef(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -134,8 +134,9 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
     const drift = Math.abs(viewerCurrentTimeRef.current - expectedTime);
 
-    // Only seek if drift is > 3s (smoother sync) AND we haven't synced in the last 2 seconds
-    if (drift > 3 && !isSyncing) {
+    // Only seek if drift is > 4s (even smoother sync) AND we haven't synced in the last 2 seconds
+    // Also ignore drift if it's extremely large (indicating a major state change handled elsewhere)
+    if (drift > 4 && drift < 300 && !isSyncing) {
       setIsSyncing(true);
       player.postMessage({ command: "seek", time: expectedTime }, "*");
       setTimeout(() => setIsSyncing(false), 2000);
