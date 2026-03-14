@@ -299,10 +299,10 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </button>
       </div>
 
-      <ChatOverlay
-        messages={chatMessages}
-        roomDocId={roomDocId}
-        user={user}
+      <ChatOverlay 
+        messages={chatMessages} 
+        roomCode={roomCode} 
+        user={user} 
         isCinematic={isCinematic}
         isVisible={isChatVisible}
       />
