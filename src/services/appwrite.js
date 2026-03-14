@@ -1,11 +1,11 @@
 import { Client, Databases, ID, Query, Account } from 'appwrite'
 
-export const PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
+const PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
 export const DATABASE_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID;
-export const TABLE_ID = import.meta.env.VITE_APPWRITE_TABLE_ID;
+const TABLE_ID = import.meta.env.VITE_APPWRITE_TABLE_ID;
 export const WATCH_PARTIES_TABLE_ID = import.meta.env.VITE_APPWRITE_WATCH_PARTIES_TABLE_ID;
 export const PARTY_MEMBERS_TABLE_ID = import.meta.env.VITE_APPWRITE_PARTY_MEMBERS_TABLE_ID;
-export const WATCH_PROGRESS_TABLE_ID = import.meta.env.VITE_APPWRITE_WATCH_PROGRESS_TABLE_ID;
+const WATCH_PROGRESS_TABLE_ID = import.meta.env.VITE_APPWRITE_WATCH_PROGRESS_TABLE_ID;
 
 const client = new Client()
   .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -250,7 +250,6 @@ export const updateWatchProgress = async (movieId, watchedTime, duration, tvMeta
       episode: tvMeta.episode || 1
     };
 
-    console.log("Updating progress with data:", data);
 
     if (existing.total > 0) {
       await database.updateDocument(
@@ -268,8 +267,7 @@ export const updateWatchProgress = async (movieId, watchedTime, duration, tvMeta
       );
     }
   } catch (error) {
-    console.error("Update progress error details:", error.response); // Get more info from Appwrite
-    console.error("Update progress total error:", error);
+    console.error("Update progress error:", error);
   }
 };
 

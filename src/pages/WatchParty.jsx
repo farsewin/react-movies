@@ -19,6 +19,7 @@ const WatchParty = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [totalEpisodes, setTotalEpisodes] = useState(null);
   const { partyMembers, roomState } = useWatchParty(roomCode)
+  const isHost = user?.$id === party?.creator_id && !!party?.creator_id;
   
   // States to keep UI in sync while preventing iframe reloads
   const [displayedEpisode, setDisplayedEpisode] = useState(1); // For header/counter
@@ -30,12 +31,14 @@ const WatchParty = () => {
     const ep = roomState?.episode || party?.episode || 1;
     setDisplayedEpisode(ep);
     
-    // Only update player if the room state changed to an episode 
-    // we aren't already displaying/playing. This stops the "echo" reload.
-    if (ep !== displayedEpisode) {
-      setPlayerEpisode(ep);
+    // For Hosts: Only update player if we aren't already displaying/playing.
+    // For Viewers: Always follow the host's room state.
+    if (ep !== playerEpisode) {
+      if (!isHost || (isHost && ep !== displayedEpisode)) {
+        setPlayerEpisode(ep);
+      }
     }
-  }, [roomState?.episode, party?.episode]);
+  }, [roomState?.episode, party?.episode, isHost]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode);

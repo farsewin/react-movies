@@ -37,7 +37,7 @@ const WatchParties = () => {
 
   return (
     <main className="bg-primary min-h-screen relative overflow-hidden">
-      <div className="pattern opacity-40" />
+      <div className="pattern opacity-30" />
       
       <div className="wrapper relative z-10">
         <nav className="flex justify-between items-center mb-16 px-2">

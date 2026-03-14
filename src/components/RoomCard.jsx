@@ -75,7 +75,7 @@ const RoomCard = ({ room }) => {
           </span>
         </div>
 
-        {/* Member Count Overlay (Demo) */}
+        {/* Member Count Overlay (Placeholder for now) */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10">
            <svg className="size-3 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />

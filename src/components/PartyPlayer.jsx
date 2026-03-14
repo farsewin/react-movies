@@ -31,14 +31,15 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
     return () => clearTimeout(timer);
   }, []);
 
-  // Determine Player URL based on media type
+  // Determine Player URL - use localEpisode to prevent reloads on native 'next' navigation
   const isTV = (roomState?.media_type || movie?.media_type) === 'tv';
   const tmdbId = roomState?.movie_id || movie?.movie_id;
   const season = roomState?.season || 1;
-  const episode = displayedEpisode || localEpisode || roomState?.episode || 1;
+  const iframeEpisode = localEpisode || roomState?.episode || 1;
+  const uiEpisode = displayedEpisode || iframeEpisode;
 
   const playerURL = isTV
-    ? `https://vidfast.pro/tv/${tmdbId}/${season}/${episode}?autoPlay=true&nextButton=true&autoNext=false`
+    ? `https://vidfast.pro/tv/${tmdbId}/${season}/${iframeEpisode}?autoPlay=true&nextButton=true&autoNext=false`
     : `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`;
 
   // --- Common Logic: Listen for Player Events ---
@@ -60,20 +61,20 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
           if (playerEvent === "play" || playerEvent === "pause" || playerEvent === "seeked" || playerEvent === "next") {
             // GRACE PERIOD: If browser pauses automatically right after host clicks "play" (common on mobile), ignore it.
             if (playerEvent === "pause" && now - lastOutgoingSyncTimeRef.current < 2000) {
-              console.log("Ignoring browser-forced pause during grace period");
               return;
             }
 
             if (timeSinceLastBroadcast > 500 || playerEvent === "next") {
               lastSyncBroadcastRef.current = now;
-              const newEpisode = playerEvent === "next" ? episode + 1 : episode;
+              const newEpisode = playerEvent === "next" ? uiEpisode + 1 : uiEpisode;
 
               if (playerEvent === "next") {
-                 if (onLocalEpisodeChange) {
-                   onLocalEpisodeChange(newEpisode); // Instantly update UI and iframe src
+                 if (onNativeNavigation) {
+                   onNativeNavigation(newEpisode); // ONLY updates UI and room state, skips iframe reload
                  }
               } else {
-                 syncRoomState(roomDocId || roomCode, playerEvent, currentTime, { episode: newEpisode });
+                 const status = (playerEvent === 'pause') ? 'pause' : 'play';
+                 syncRoomState(roomDocId || roomCode, status, currentTime, { episode: newEpisode });
                  lastOutgoingSyncTimeRef.current = Date.now();
               }
             }
@@ -84,7 +85,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
             if (now - (window.lastProgressUpdate || 0) > 5000) {
               window.lastProgressUpdate = now;
-              updateWatchProgress(tmdbId, currentTime, duration, { media_type: isTV ? 'tv' : 'movie', season, episode });
+              updateWatchProgress(tmdbId, currentTime, duration, { media_type: isTV ? 'tv' : 'movie', season, episode: uiEpisode });
             }
           }
         }
@@ -96,7 +97,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
           const showData = mediaData[showKey];
           const newEpisode = showData.last_episode_watched;
 
-          if (newEpisode && newEpisode > (displayedEpisode || episode)) {
+          if (newEpisode && newEpisode > (displayedEpisode || uiEpisode)) {
             if (onNativeNavigation) {
               onNativeNavigation(newEpisode); // ONLY updates UI, does not reload iframe
             }
@@ -107,7 +108,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [tmdbId, isHost, roomCode, isTV, season, episode, displayedEpisode, localEpisode, roomDocId]);
+  }, [tmdbId, isHost, roomCode, isTV, season, uiEpisode, displayedEpisode, localEpisode, roomDocId, onNativeNavigation]);
 
   // --- Host Heartbeat: Keep Room Active with REAL position ---
   useEffect(() => {
@@ -116,11 +117,11 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
     const heartbeatInterval = setInterval(() => {
       // Use the ref because it's updated constantly by the player message listener
       const currentTime = viewerCurrentTimeRef.current || 0;
-      syncRoomState(roomDocId, roomState?.playback_status || 'play', currentTime, { episode });
+      syncRoomState(roomDocId, roomState?.playback_status || 'play', currentTime, { episode: uiEpisode });
     }, 120000); // 2 minutes
 
     return () => clearInterval(heartbeatInterval);
-  }, [isHost, roomDocId, episode, roomState?.playback_status]);
+  }, [isHost, roomDocId, uiEpisode, roomState?.playback_status]);
 
   // --- Viewer Logic: Sync with Host State ---
   useEffect(() => {
@@ -192,7 +193,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
         {isTV && (
           <div className="px-3 py-1 bg-dark-100/80 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 shadow-lg text-indigo-300">
-            S{season} : E{episode}
+            S{season} : E{uiEpisode}
           </div>
         )}
       </div>
