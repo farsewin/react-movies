@@ -113,15 +113,20 @@ const WatchParty = () => {
   useEffect(() => {
     if (!party || !user || user.$id !== party.creator_id) return;
 
-    // Tab Close Detection (Cleanup)
-    const handleBeforeUnload = () => {
-      deleteWatchParty(party.$id);
+    // Mobile-Reliable Cleanup (pagehide & visibilitychange)
+    const handleCleanup = (event) => {
+      // visibilitychange 'hidden' is more reliable than beforeunload on mobile
+      if (document.visibilityState === 'hidden' || event?.type === 'pagehide') {
+        deleteWatchParty(party.$id);
+      }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleCleanup);
+    document.addEventListener('visibilitychange', handleCleanup);
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleCleanup);
+      document.removeEventListener('visibilitychange', handleCleanup);
     };
   }, [party, user]);
 

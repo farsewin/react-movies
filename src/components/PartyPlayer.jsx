@@ -20,6 +20,9 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   const [shouldLoadIframe, setShouldLoadIframe] = useState(false);
   const lastSentCommandRef = useRef(null); // Tracks last command sent to iframe to avoid redundancy
   const lastStateRef = useRef(null);      // Tracks last playback_status we reacted to
+  
+  // Mobile Detection
+  const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
 
   // Optimization: Delay iframe loading to prioritize UI paint
   useEffect(() => {
@@ -134,12 +137,15 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
     const drift = Math.abs(viewerCurrentTimeRef.current - expectedTime);
 
-    // Only seek if drift is > 4s (even smoother sync) AND we haven't synced in the last 2 seconds
-    // Also ignore drift if it's extremely large (indicating a major state change handled elsewhere)
-    if (drift > 4 && drift < 300 && !isSyncing) {
+    // Adaptive Threshold: Phones need more "breathing room" (6s) than PCs (4s)
+    const threshold = isMobile ? 6 : 4;
+    const cooldown = isMobile ? 3000 : 2000;
+
+    // Only seek if drift is > threshold AND we haven't synced in the last 'cooldown' ms
+    if (drift > threshold && drift < 300 && !isSyncing) {
       setIsSyncing(true);
       player.postMessage({ command: "seek", time: expectedTime }, "*");
-      setTimeout(() => setIsSyncing(false), 2000);
+      setTimeout(() => setIsSyncing(false), cooldown);
     }
 
   }, [roomState, isHost]);
