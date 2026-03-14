@@ -22,10 +22,14 @@ export const useCreateParty = () => {
       
       await createWatchParty(roomCode, movieWithTitle);
       
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch (err) {
-        console.warn("Fullscreen request failed:", err);
+      const isMobile = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      if (!isMobile) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (err) {
+          console.warn("Fullscreen request failed:", err);
+        }
       }
       
       navigate(`/party/${roomCode}`);
