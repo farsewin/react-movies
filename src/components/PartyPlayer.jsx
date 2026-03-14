@@ -20,6 +20,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   const [shouldLoadIframe, setShouldLoadIframe] = useState(false);
   const lastSentCommandRef = useRef(null); // Tracks last command sent to iframe to avoid redundancy
   const lastStateRef = useRef(null);      // Tracks last playback_status we reacted to
+  const lastOutgoingSyncTimeRef = useRef(0); // For Host grace period
   
   // Mobile Detection
   const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
@@ -57,6 +58,12 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
           const timeSinceLastBroadcast = now - lastSyncBroadcastRef.current;
 
           if (playerEvent === "play" || playerEvent === "pause" || playerEvent === "seeked" || playerEvent === "next") {
+            // GRACE PERIOD: If browser pauses automatically right after host clicks "play" (common on mobile), ignore it.
+            if (playerEvent === "pause" && now - lastOutgoingSyncTimeRef.current < 2000) {
+              console.log("Ignoring browser-forced pause during grace period");
+              return;
+            }
+
             if (timeSinceLastBroadcast > 500 || playerEvent === "next") {
               lastSyncBroadcastRef.current = now;
               const newEpisode = playerEvent === "next" ? episode + 1 : episode;
@@ -67,6 +74,7 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
                  }
               } else {
                  syncRoomState(roomDocId || roomCode, playerEvent, currentTime, { episode: newEpisode });
+                 lastOutgoingSyncTimeRef.current = Date.now();
               }
             }
           }
