@@ -268,11 +268,11 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-20 flex gap-2">
+      <div className={`absolute bottom-4 left-4 z-20 flex gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
         {isHost ? (
           <div className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
             <span className="size-1.5 bg-white rounded-full" />
-            Host (Master Control)
+            Host
           </div>
         ) : (
           <div className="px-3 py-1 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg status-badge-pulse">
