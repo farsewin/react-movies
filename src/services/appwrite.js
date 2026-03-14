@@ -66,7 +66,8 @@ export const createWatchParty = async (roomCode, movie) => {
       {
         room_code: roomCode,
         movie_id: movie.id.toString(),
-        movie_title: movie.title,
+        movie_title: movie.title || movie.name,
+        poster_url: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
         creator_id: user.$id,
         creator_name: user.name,
         created_at: new Date().toISOString(),
@@ -140,6 +141,18 @@ export const joinWatchParty = async (roomCode, user, isCreator = false) => {
   }
 };
 
+export const deleteWatchParty = async (documentId) => {
+  try {
+    await database.deleteDocument(
+      DATABASE_ID,
+      WATCH_PARTIES_TABLE_ID,
+      documentId
+    );
+  } catch (error) {
+    console.error("Delete watch party error:", error);
+  }
+};
+
 export const getWatchParty = async (roomCode) => {
   try {
     const result = await database.listDocuments(
@@ -183,6 +196,26 @@ export const syncRoomState = async (roomIdentifier, playbackStatus, lastSyncTime
     );
   } catch (error) {
     console.error("Sync room state error:", error);
+  }
+};
+
+export const getAvailableRooms = async () => {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    
+    const response = await database.listDocuments(
+      DATABASE_ID,
+      WATCH_PARTIES_TABLE_ID,
+      [
+        Query.greaterThan('last_sync_at', fiveMinutesAgo),
+        Query.orderDesc('last_sync_at'),
+        Query.limit(20)
+      ]
+    );
+    return response.documents;
+  } catch (error) {
+    console.error("Get available rooms error:", error);
+    return [];
   }
 };
 

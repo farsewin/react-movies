@@ -4,6 +4,7 @@ import Home from './pages/Home.jsx'
 import Spinner from './components/Spinner.jsx'
 
 const WatchParty = lazy(() => import('./pages/WatchParty.jsx'));
+const WatchParties = lazy(() => import('./pages/WatchParties.jsx'));
 
 const App = () => {
   return (
@@ -15,6 +16,7 @@ const App = () => {
       }>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/parties" element={<WatchParties />} />
           <Route path="/party/:roomCode" element={<WatchParty />} />
         </Routes>
       </Suspense>

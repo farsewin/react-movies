@@ -18,6 +18,8 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
   const viewerCurrentTimeRef = useRef(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [shouldLoadIframe, setShouldLoadIframe] = useState(false);
+  const lastSentCommandRef = useRef(null); // Tracks last command sent to iframe to avoid redundancy
+  const lastStateRef = useRef(null);      // Tracks last playback_status we reacted to
 
   // Optimization: Delay iframe loading to prioritize UI paint
   useEffect(() => {
@@ -94,7 +96,20 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [tmdbId, isHost, roomCode, isTV, season, episode, displayedEpisode, localEpisode]);
+  }, [tmdbId, isHost, roomCode, isTV, season, episode, displayedEpisode, localEpisode, roomDocId]);
+
+  // --- Host Heartbeat: Keep Room Active with REAL position ---
+  useEffect(() => {
+    if (!isHost || !roomDocId) return;
+
+    const heartbeatInterval = setInterval(() => {
+      // Use the ref because it's updated constantly by the player message listener
+      const currentTime = viewerCurrentTimeRef.current || 0;
+      syncRoomState(roomDocId, roomState?.playback_status || 'play', currentTime, { episode });
+    }, 120000); // 2 minutes
+
+    return () => clearInterval(heartbeatInterval);
+  }, [isHost, roomDocId, episode, roomState?.playback_status]);
 
   // --- Viewer Logic: Sync with Host State ---
   useEffect(() => {
@@ -103,21 +118,27 @@ const PartyPlayer = ({ movie, roomCode, roomDocId, user, roomState, localEpisode
     const player = iframeRef.current.contentWindow;
     const { playback_status, last_sync_time, last_sync_at } = roomState;
 
-    if (playback_status === "play") {
-      player.postMessage({ command: "play" }, "*");
-    } else {
-      player.postMessage({ command: "pause" }, "*");
+    // 1. Buffering: Only send play/pause if it actually changed
+    if (playback_status !== lastSentCommandRef.current) {
+      if (playback_status === "play") {
+        player.postMessage({ command: "play" }, "*");
+      } else {
+        player.postMessage({ command: "pause" }, "*");
+      }
+      lastSentCommandRef.current = playback_status;
     }
 
+    // 2. Drift & Sync Logic
     const timeSinceSync = (new Date().getTime() - new Date(last_sync_at).getTime()) / 1000;
     const expectedTime = playback_status === "play" ? last_sync_time + timeSinceSync : last_sync_time;
 
     const drift = Math.abs(viewerCurrentTimeRef.current - expectedTime);
 
-    if (drift > 2) {
+    // Only seek if drift is > 3s (smoother sync) AND we haven't synced in the last 2 seconds
+    if (drift > 3 && !isSyncing) {
       setIsSyncing(true);
       player.postMessage({ command: "seek", time: expectedTime }, "*");
-      setTimeout(() => setIsSyncing(false), 1000);
+      setTimeout(() => setIsSyncing(false), 2000);
     }
 
   }, [roomState, isHost]);

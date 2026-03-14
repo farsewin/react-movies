@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Search from '../components/Search.jsx'
 import Spinner from '../components/Spinner.jsx'
 import MovieCard from '../components/MovieCard.jsx'
@@ -93,17 +94,25 @@ const Home = () => {
 
       <div className="wrapper">
         <nav className="flex justify-between items-center mb-10 relative z-50">
-           <p className="text-white font-bold text-xl">MovieApp</p>
-           {user ? (
-             <div className="flex items-center gap-4">
-               <span className="text-white">Hi, {user.name}</span>
-               <button onClick={handleLogout} className="text-light-200 hover:text-white transition-colors">Logout</button>
-             </div>
-           ) : (
-             <button onClick={() => setIsAuthModalOpen(true)} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold hover:bg-indigo-700 transition-all">
-                Login / Sign Up
-             </button>
-           )}
+            <p className="text-white font-bold text-xl">MovieApp</p>
+            <div className="flex items-center gap-6">
+              <Link to="/parties" className="text-light-200 hover:text-white font-bold transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
+                <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Watch Parties
+              </Link>
+              {user ? (
+                <div className="flex items-center gap-4">
+                  <span className="text-white">Hi, {user.name}</span>
+                  <button onClick={handleLogout} className="text-light-200 hover:text-white transition-colors">Logout</button>
+                </div>
+              ) : (
+                <button onClick={() => setIsAuthModalOpen(true)} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold hover:bg-indigo-700 transition-all">
+                   Login / Sign Up
+                </button>
+              )}
+            </div>
         </nav>
 
         <header>

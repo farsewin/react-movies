@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getWatchParty, joinWatchParty, syncRoomState } from '../services/appwrite'
+import { getWatchParty, joinWatchParty, syncRoomState, deleteWatchParty } from '../services/appwrite'
 import { useWatchParty } from '../hooks/useWatchParty'
 import { useUser } from '../context/UserContext.jsx'
 import Spinner from '../components/Spinner'
@@ -108,6 +108,33 @@ const WatchParty = () => {
 
     joinRoom();
   }, [roomCode, user, party, isUserLoading]);
+
+  // --- Deletion Logic ---
+  useEffect(() => {
+    if (!party || !user || user.$id !== party.creator_id) return;
+
+    // Tab Close Detection (Cleanup)
+    const handleBeforeUnload = () => {
+      deleteWatchParty(party.$id);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [party, user]);
+
+  const handleLeaveRoom = async () => {
+    if (user?.$id === party?.creator_id) {
+      if (confirm("You are the host. If you leave, the room will be destroyed for everyone. Continue?")) {
+        await deleteWatchParty(party?.$id);
+        navigate("/parties");
+      }
+    } else {
+      navigate("/parties");
+    }
+  };
 
   if (isLoading) return (
     <main className="bg-primary min-h-screen text-white p-5 lg:p-0 flex flex-col items-center justify-center">
@@ -220,6 +247,16 @@ const WatchParty = () => {
                    </button>
                  </div>
                </div>
+               
+               <button 
+                 onClick={handleLeaveRoom}
+                 className="bg-white/5 hover:bg-red-500/20 text-light-200 hover:text-red-400 px-4 py-3 rounded-2xl transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2 font-bold text-xs"
+               >
+                 <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                 </svg>
+                 Leave Room
+               </button>
             </div>
         </header>
 
