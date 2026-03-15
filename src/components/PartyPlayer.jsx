@@ -17,6 +17,10 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const containerRef = useRef(null);
   
   const toggleFullscreen = () => {
+    if (isMobile) {
+      setIsFillMode(!isFillMode);
+      return;
+    }
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
       containerRef.current.requestFullscreen().catch(err => {
@@ -41,6 +45,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const lastOutgoingSyncTimeRef = useRef(0); // For Host grace period
   const [showControls, setShowControls] = useState(true);
   const [isChatVisible, setIsChatVisible] = useState(true);
+  const [isFillMode, setIsFillMode] = useState(false);
   const controlsTimeoutRef = useRef(null);
   
   // Mobile Detection
@@ -256,7 +261,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           ref={iframeRef}
           id="party-player-iframe"
           src={playerURL}
-          className="absolute inset-0 w-full h-full"
+          className={`absolute inset-0 w-full h-full transition-transform duration-500 ${isFillMode ? 'scale-[1.25]' : 'scale-100'}`}
           allowFullScreen
           allow="autoplay; encrypted-media"
           title="Media Player"
@@ -289,13 +294,21 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
         <button 
            onClick={toggleFullscreen}
-           className="px-3 py-1 bg-white/5 hover:bg-white/10 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-white/10 shadow-lg transition-all hover:scale-105 active:scale-95"
-           title="Toggle Cinematic Fullscreen"
+           className={`px-3 py-1 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
+           title={isMobile ? (isFillMode ? "Exit Fill Mode" : "Fill Screen") : "Toggle Cinematic Fullscreen"}
         >
           <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            {isMobile ? (
+              isFillMode ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5" />
+              )
+            ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            )}
           </svg>
-          Fullscreen
+          {isMobile ? (isFillMode ? "Original" : "Fill") : "Fullscreen"}
         </button>
       </div>
 
