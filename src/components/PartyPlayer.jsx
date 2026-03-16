@@ -59,8 +59,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const [isFillMode, setIsFillMode] = useState(false);
   const controlsTimeoutRef = useRef(null);
   
-  // Mobile Detection
-  const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
+  // Mobile Detection - using broader check to match RoomCard.jsx
+  const isMobile = useRef(window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
 
   // Optimization: Delay iframe loading to prioritize UI paint
   useEffect(() => {
@@ -293,7 +293,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </div>
       )}
 
-      <div className={`absolute ${isMobile ? 'bottom-10' : 'bottom-4'} left-4 z-20 flex gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+      <div className={`absolute ${isMobile ? 'bottom-12' : 'bottom-4'} left-4 z-20 flex gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
         {isHost ? (
           <div className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
             <span className="size-1.5 bg-white rounded-full" />
