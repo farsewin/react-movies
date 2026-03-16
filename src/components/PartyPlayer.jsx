@@ -329,8 +329,11 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         <div className={`pt-safe px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/90 via-black/40 to-transparent ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
           <div className="flex items-center gap-4">
             <button 
-              onClick={onLeaveParty}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all hover:scale-110 active:scale-90"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onLeaveParty) onLeaveParty();
+              }}
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all hover:scale-110 active:scale-90 relative z-50"
             >
               <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

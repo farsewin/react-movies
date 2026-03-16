@@ -147,10 +147,10 @@ const WatchParty = () => {
     if (user?.$id === party?.creator_id) {
       if (confirm("You are the host. If you leave, the room will be destroyed for everyone. Continue?")) {
         await deleteWatchParty(party?.$id);
-        navigate("/parties");
+        navigate("/");
       }
     } else {
-      navigate("/parties");
+      navigate("/");
     }
   };
 
@@ -286,12 +286,15 @@ const WatchParty = () => {
            <div className={`${isCinematic ? 'fixed inset-0 z-[100] bg-black' : 'lg:col-span-3'}`}>
              <PartyPlayer 
                ref={playerRef}
-               movie={party} // Use stable initial party for static info (creator_id, etc.)
+               movie={party} 
                roomCode={roomCode} 
                roomDocId={party?.$id}
                user={user} 
-               roomState={roomState} // Dynamic room state for sync
+               roomState={roomState}
                chatMessages={chatMessages}
+               partyMembers={partyMembers}
+               isCinematic={isCinematic}
+               onLeaveParty={handleLeaveRoom}
                displayedEpisode={displayedEpisode}
                localEpisode={playerEpisode}
                onLocalEpisodeChange={(ep) => {
