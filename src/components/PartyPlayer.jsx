@@ -281,7 +281,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           ref={iframeRef}
           id="party-player-iframe"
           src={playerURL}
-          className={`absolute inset-0 w-full h-full transition-transform duration-500 ${isFillMode ? 'scale-[1.25]' : 'scale-100'}`}
+          className={`absolute inset-0 w-full h-full transition-transform duration-500 ease-in-out ${isFillMode ? 'scale-[1.1]' : 'scale-100'}`}
           allowFullScreen
           allow="autoplay; encrypted-media"
           title="Media Player"
