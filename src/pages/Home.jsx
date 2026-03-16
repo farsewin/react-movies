@@ -6,7 +6,7 @@ import MovieCard from '../components/MovieCard.jsx'
 import { MovieCardSkeleton, TrendingSkeleton } from '../components/Skeleton.jsx'
 import AuthModal from '../components/AuthModal.jsx'
 import { useDebounce } from 'react-use'
-import { getTrendingMovies, updateSearchCount, logout } from '../services/appwrite.js'
+import { updateSearchCount, logout } from '../services/appwrite.js'
 import { useUser } from '../context/UserContext.jsx'
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
@@ -32,6 +32,7 @@ const Home = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [trendingMovies, setTrendingMovies] = useState([]);
+  const [trendingTimeWindow, setTrendingTimeWindow] = useState('day'); // 'day' or 'week'
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm])
@@ -42,12 +43,13 @@ const Home = () => {
     try {
       const endpoint = query
         ? `${API_BASE_URL}/search/${mediaType}?query=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/discover/${mediaType}?sort_by=popularity.desc`;
+        : `${API_BASE_URL}/${mediaType}/popular`;
 
       const response = await fetch(endpoint, API_OPTIONS);
       if(!response.ok) throw new Error(`Failed to fetch ${mediaType === 'movie' ? 'movies' : 'TV shows'}`);
       const data = await response.json();
       setMediaList(data.results || []);
+      
       if(query && data.results.length > 0) {
         await updateSearchCount(query, data.results[0]);
       }
@@ -61,10 +63,13 @@ const Home = () => {
 
   const loadTrendingMovies = async () => {
     try {
-      const movies = await getTrendingMovies();
-      setTrendingMovies(movies);
+      const endpoint = `${API_BASE_URL}/trending/${mediaType}/${trendingTimeWindow}`;
+      const response = await fetch(endpoint, API_OPTIONS);
+      if(!response.ok) throw new Error("Failed to fetch trending");
+      const data = await response.json();
+      setTrendingMovies(data.results.slice(0, 10) || []);
     } catch (error) {
-      console.error(`Error fetching trending movies: ${error}`);
+      console.error(`Error fetching trending content: ${error}`);
     }
   }
 
@@ -83,7 +88,7 @@ const Home = () => {
 
   useEffect(() => {
     loadTrendingMovies();
-  }, []);
+  }, [trendingTimeWindow, mediaType]);
 
   return (
     <main>
@@ -142,12 +147,30 @@ const Home = () => {
 
         {trendingMovies && trendingMovies.length > 0 ? (
           <section className="trending">
-            <h2>Trending Movies</h2>
+            <div className="flex items-center justify-between mb-6">
+               <div className="flex flex-col">
+                  <h2>Trending {mediaType === 'movie' ? 'Movies' : 'TV Shows'}</h2>
+               </div>
+               <div className="flex bg-dark-100/40 p-1 rounded-lg backdrop-blur-sm border border-white/5">
+                  <button 
+                    onClick={() => setTrendingTimeWindow('day')}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${trendingTimeWindow === 'day' ? 'bg-indigo-600 text-white shadow-lg' : 'text-light-200 hover:text-white'}`}
+                  >
+                    Today
+                  </button>
+                  <button 
+                    onClick={() => setTrendingTimeWindow('week')}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${trendingTimeWindow === 'week' ? 'bg-indigo-600 text-white shadow-lg' : 'text-light-200 hover:text-white'}`}
+                  >
+                    This Week
+                  </button>
+               </div>
+            </div>
             <ul>
               {trendingMovies.map((movie, index) => (
-                <li key={movie.$id} onClick={() => handleCreateParty({ ...movie, movie_id: movie.tmdb_id || movie.movie_id, media_type: 'movie' })} className="cursor-pointer group relative overflow-hidden rounded-xl">
+                <li key={movie.id} onClick={() => handleCreateParty({ ...movie, movie_id: movie.id, media_type: mediaType })} className="cursor-pointer group relative overflow-hidden rounded-xl">
                   <p>{index + 1}</p>
-                  <img src={movie.poster_url} alt={movie.title} className="transition-transform duration-500 group-hover:scale-110" />
+                  <img src={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '/no-poster.png'} alt={movie.title || movie.name} className="transition-transform duration-500 group-hover:scale-110" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                      <div className="bg-indigo-600 p-3 rounded-full scale-50 group-hover:scale-100 transition-transform duration-300">
                         <svg className="size-5 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -164,7 +187,9 @@ const Home = () => {
         )}
 
         <section className="all-movies">
-          <h2>{mediaType === 'movie' ? 'All Movies' : 'All TV Shows'}</h2>
+          <div className="flex flex-col mb-6">
+            <h2> Popular {mediaType === 'movie' ? 'Movies' : 'TV Shows'}</h2>
+          </div>
           {isLoading ? (
             <ul>
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (

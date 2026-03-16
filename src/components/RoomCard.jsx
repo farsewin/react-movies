@@ -42,12 +42,14 @@ const RoomCard = ({ room }) => {
   const handleJoin = async () => {
     const isMobile = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    if (!isMobile) {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch (err) {
-        console.warn("Fullscreen request failed:", err);
+    try {
+      await document.documentElement.requestFullscreen();
+      // Lock orientation to landscape on mobile if possible
+      if (isMobile && screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape').catch(err => console.warn("Orientation lock failed:", err));
       }
+    } catch (err) {
+      console.warn("Fullscreen/Orientation request failed:", err);
     }
     navigate(`/party/${room_code}`);
   };
