@@ -17,11 +17,22 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const containerRef = useRef(null);
   
   const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+
     if (isMobile) {
-      setIsFillMode(!isFillMode);
+      if (!document.fullscreenElement) {
+        // State 1: Enter Fullscreen
+        containerRef.current.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      } else {
+        // State 2 & 3: Toggle Fill/Original
+        setIsFillMode(!isFillMode);
+      }
       return;
     }
-    if (!containerRef.current) return;
+
+    // Desktop: Standard Toggle
     if (!document.fullscreenElement) {
       containerRef.current.requestFullscreen().catch(err => {
         console.error(`Error attempting to enable full-screen mode: ${err.message}`);
@@ -72,13 +83,22 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
       container.addEventListener('mousemove', handleActivity);
       container.addEventListener('touchstart', handleActivity);
     }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFillMode(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
     return () => {
       if (container) {
         container.removeEventListener('mousemove', handleActivity);
         container.removeEventListener('touchstart', handleActivity);
       }
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [isCinematic, isMobile]);
 
   // Determine Player URL - use localEpisode to prevent reloads on native 'next' navigation
   const isTV = (roomState?.media_type || movie?.media_type) === 'tv';
@@ -295,11 +315,13 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         <button 
            onClick={toggleFullscreen}
            className={`px-3 py-1 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
-           title={isMobile ? (isFillMode ? "Exit Fill Mode" : "Fill Screen") : "Toggle Cinematic Fullscreen"}
+           title={isMobile ? (document.fullscreenElement ? (isFillMode ? "Fit Aspect" : "Fill Screen") : "Enter Fullscreen") : "Toggle Cinematic Fullscreen"}
         >
           <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             {isMobile ? (
-              isFillMode ? (
+              !document.fullscreenElement ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              ) : isFillMode ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               ) : (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5" />
@@ -308,7 +330,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             )}
           </svg>
-          {isMobile ? (isFillMode ? "Original" : "Fill") : "Fullscreen"}
+          {isMobile ? (!document.fullscreenElement ? "Fullscreen" : (isFillMode ? "Fit" : "Fill")) : "Fullscreen"}
         </button>
       </div>
 
