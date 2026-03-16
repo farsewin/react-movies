@@ -35,7 +35,7 @@ const ChatOverlay = ({ messages, roomCode, user, isCinematic, isVisible = true }
   const emojis = ['😊', '😂', '🔥', '❤', '😮', '😢', '👏', '🎬'];
 
   return (
-    <div className="absolute bottom-24 right-6 z-40 flex flex-col items-end transition-all duration-300 w-[320px] max-w-[90vw]">
+    <div className="flex flex-col items-end w-full h-full max-w-[320px]">
       
       {/* Messages Area */}
       <div className="w-full overflow-hidden transition-all duration-300 opacity-100 mb-4">

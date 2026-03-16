@@ -89,11 +89,15 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     }
 
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
+      const isActuallyFS = !!document.fullscreenElement;
+      if (!isActuallyFS) {
         setIsFillMode(false);
         if (screen.orientation?.unlock) {
-          screen.orientation.unlock();
+          screen.orientation.unlock().catch(() => {});
         }
+        document.body.classList.remove('overflow-hidden');
+      } else {
+        document.body.classList.add('overflow-hidden');
       }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -104,6 +108,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         container.removeEventListener('touchstart', handleActivity);
       }
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.body.classList.remove('overflow-hidden');
     };
   }, [isCinematic, isMobile]);
 
@@ -237,6 +242,45 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
   const isFullscreen = !!document.fullscreenElement;
 
+  // Gesture Handling
+  const lastTapRef = useRef(0);
+  const handleGesture = (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Double Tap detected
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const width = rect.width;
+      
+      const player = iframeRef.current?.contentWindow;
+      if (!player) return;
+
+      if (x < width * 0.3) {
+        // Left 30%: Rewind
+        player.postMessage({ command: "seek", time: viewerCurrentTimeRef.current - 10 }, "*");
+      } else if (x > width * 0.7) {
+        // Right 30%: Fast Forward
+        player.postMessage({ command: "seek", time: viewerCurrentTimeRef.current + 10 }, "*");
+      } else {
+        // Center 40%: Pause/Play
+        const newStatus = roomState?.playback_status === 'play' ? 'pause' : 'play';
+        if (isHost) {
+          syncRoomState(roomDocId || roomCode, newStatus, viewerCurrentTimeRef.current, { episode: uiEpisode });
+        } else {
+          player.postMessage({ command: newStatus }, "*");
+        }
+      }
+      lastTapRef.current = 0; // Reset
+    } else {
+      lastTapRef.current = now;
+      // Single Tap: Toggle UI
+      setShowControls(prev => !prev);
+    }
+  };
+
   return (
     <div 
       ref={containerRef} 
@@ -246,15 +290,15 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           : 'aspect-video rounded-2xl border border-light-100/10 shadow-2xl'
       }`}
     >
-      {/* Video Layer (Independent from UI Scaling) */}
-      <div className={`absolute inset-0 z-0 flex items-center justify-center overflow-hidden`}>
+      {/* 1️⃣ VIDEO LAYER: Handles scaling only */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden pointer-events-none">
         {shouldLoadIframe ? (
           <iframe
             ref={iframeRef}
             id="party-player-iframe"
             src={playerURL}
-            className={`w-full h-full transition-transform duration-500 ease-out ${
-              isFillMode ? 'scale-[1.35] sm:scale-[1.1]' : 'scale-100'
+            className={`w-full h-full transition-transform duration-500 ease-out pointer-events-auto ${
+              isFillMode ? 'scale-[1.4] sm:scale-[1.15]' : 'scale-100'
             }`}
             allowFullScreen
             allow="autoplay; encrypted-media"
@@ -266,11 +310,23 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         )}
       </div>
 
-      {/* UI Overlay Layer (Always Anchored to Screen) */}
-      <div className={`absolute inset-0 z-10 pointer-events-none flex flex-col`}>
+      {/* 2️⃣ GESTURE LAYER: Invisible overlay for taps/double-taps */}
+      <div 
+        onClick={handleGesture}
+        onTouchStart={(e) => {
+          // Prevent default only if it's a double tap candidate to allow UI toggling
+          const now = Date.now();
+          if (now - lastTapRef.current < 300) e.preventDefault();
+        }}
+        className="absolute inset-0 z-20 cursor-pointer pointer-events-auto"
+        title="Tap to controls | Double tap to seek"
+      />
+
+      {/* 3️⃣ UI OVERLAY LAYER: Fixed elements anchored to screen */}
+      <div className={`absolute inset-0 z-30 pointer-events-none flex flex-col`}>
         
         {/* Cinematic Top Bar */}
-        <div className={`pt-safe px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/80 via-black/40 to-transparent ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
+        <div className={`pt-safe px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/90 via-black/40 to-transparent ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
           <div className="flex items-center gap-4">
             <button 
               onClick={onLeaveParty}
@@ -362,19 +418,18 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           </div>
         </div>
 
-        {/* Chat Overlay (Positioned Absolutely over UI Layer) */}
-        <div className={`fixed bottom-24 right-6 sm:right-10 z-[60] pointer-events-auto pr-safe pb-safe ${isChatVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'} transition-all duration-300`}>
+        {/* Chat Overlay (Anchored within UI Layer) */}
+        <div className={`absolute bottom-28 right-6 z-[60] pointer-events-auto pr-safe pb-safe ${isChatVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'} transition-all duration-300`}>
           <ChatOverlay 
             messages={chatMessages} 
             roomCode={roomCode} 
             user={user} 
             isCinematic={isCinematic}
-            isVisible={true} // Visibility handled by parent container for better animations
+            isVisible={true}
           />
         </div>
 
       </div>
-
     </div>
   );
 });
