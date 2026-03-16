@@ -281,7 +281,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           ref={iframeRef}
           id="party-player-iframe"
           src={playerURL}
-          className={`absolute inset-0 w-full h-full transition-transform duration-500 ease-in-out ${isFillMode ? 'scale-[1.1]' : 'scale-100'}`}
+          className={`absolute inset-0 w-full h-full transition-transform duration-500 ease-in-out ${isFillMode ? 'scale-[1.05]' : 'scale-100'}`}
           allowFullScreen
           allow="autoplay; encrypted-media"
           title="Media Player"
@@ -293,7 +293,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </div>
       )}
 
-      <div className={`absolute bottom-4 left-4 z-20 flex gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+      <div className={`absolute ${isMobile ? 'bottom-10' : 'bottom-4'} left-4 z-20 flex gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
         {isHost ? (
           <div className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
             <span className="size-1.5 bg-white rounded-full" />
