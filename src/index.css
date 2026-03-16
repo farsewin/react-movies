@@ -182,3 +182,30 @@
 .glass-panel {
   @apply bg-dark-100/80 backdrop-blur-md border border-light-100/10 shadow-xl;
 }
+
+@utility h-dvh {
+  height: 100dvh;
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility inset-safe {
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+}

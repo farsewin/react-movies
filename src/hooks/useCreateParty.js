@@ -26,12 +26,11 @@ export const useCreateParty = () => {
       
       try {
         await document.documentElement.requestFullscreen();
-        // Lock orientation to landscape on mobile if possible
-        if (isMobile && screen.orientation && screen.orientation.lock) {
-          await screen.orientation.lock('landscape').catch(err => console.warn("Orientation lock failed:", err));
+        if (screen.orientation?.lock) {
+          screen.orientation.lock("landscape").catch(e => console.warn("Orientation lock failed:", e));
         }
       } catch (err) {
-        console.warn("Fullscreen/Orientation request failed:", err);
+        console.warn("Fullscreen request failed:", err);
       }
       
       navigate(`/party/${roomCode}`);

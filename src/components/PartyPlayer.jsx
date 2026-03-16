@@ -22,7 +22,11 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     if (isMobile) {
       if (!document.fullscreenElement) {
         // State 1: Enter Fullscreen
-        containerRef.current.requestFullscreen().catch(err => {
+        containerRef.current.requestFullscreen().then(() => {
+          if (screen.orientation?.lock) {
+            screen.orientation.lock("landscape").catch(e => console.warn("Orientation lock failed:", e));
+          }
+        }).catch(err => {
           console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
@@ -59,8 +63,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const [isFillMode, setIsFillMode] = useState(false);
   const controlsTimeoutRef = useRef(null);
   
-  // Mobile Detection - using broader check to match RoomCard.jsx
-  const isMobile = useRef(window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
+  // Mobile Detection
+  const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)).current;
 
   // Optimization: Delay iframe loading to prioritize UI paint
   useEffect(() => {
@@ -87,6 +91,9 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
         setIsFillMode(false);
+        if (screen.orientation?.unlock) {
+          screen.orientation.unlock();
+        }
       }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -228,119 +235,145 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
   }, [roomState, isHost]);
 
+  const isFullscreen = !!document.fullscreenElement;
+
   return (
-    <div ref={containerRef} className={`relative overflow-hidden bg-black group/player transition-all duration-300 ${isCinematic ? 'w-full h-full' : 'aspect-video rounded-2xl border border-light-100/10 shadow-2xl'}`}>
-      {/* Cinematic Top Bar */}
-      <div className={`absolute top-0 inset-x-0 z-50 bg-linear-to-b from-black/90 via-black/40 to-transparent p-6 flex items-center justify-between transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={onLeaveParty}
-            className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all hover:scale-110 active:scale-90"
-          >
-            <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button 
-            onClick={() => {
-              navigator.clipboard.writeText(roomCode);
-              alert("Room Code Copied!");
-            }}
-            className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-light-200 transition-all hover:scale-105 active:scale-95 border border-white/5 flex items-center gap-2"
-          >
-            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-            </svg>
-            <span className="font-mono text-sm uppercase tracking-tighter hidden sm:block">{roomCode}</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsChatVisible(!isChatVisible)}
-            className={`transition-all hover:scale-110 active:scale-95 flex items-center justify-center ${isChatVisible ? 'text-indigo-400' : 'text-white/40 hover:text-white'}`}
-            title={isChatVisible ? "Hide Chat" : "Show Chat"}
-          >
-            <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-          </button>
-
-          <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
-            <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-            <span className="text-white font-black text-sm tracking-tighter">{(partyMembers?.length || 1)}</span>
-            <svg className="size-4 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {shouldLoadIframe ? (
-        <iframe
-          ref={iframeRef}
-          id="party-player-iframe"
-          src={playerURL}
-          className={`absolute inset-0 w-full h-full transition-transform duration-500 ease-in-out ${isFillMode ? 'scale-[1.05]' : 'scale-100'}`}
-          allowFullScreen
-          allow="autoplay; encrypted-media"
-          title="Media Player"
-          frameBorder="0"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="size-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-        </div>
-      )}
-
-      <div className={`absolute ${isMobile ? 'bottom-14' : 'bottom-6'} left-6 z-50 flex flex-wrap gap-2 transition-all duration-500 transform ${showControls || (!document.fullscreenElement && !isCinematic) ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
-        {isHost ? (
-          <div className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
-            <span className="size-1.5 bg-white rounded-full" />
-            Host
-          </div>
+    <div 
+      ref={containerRef} 
+      className={`relative overflow-hidden bg-black group/player transition-all duration-300 ${
+        isFullscreen || isCinematic 
+          ? 'fixed inset-0 w-screen h-dvh z-[9999]' 
+          : 'aspect-video rounded-2xl border border-light-100/10 shadow-2xl'
+      }`}
+    >
+      {/* Video Layer (Independent from UI Scaling) */}
+      <div className={`absolute inset-0 z-0 flex items-center justify-center overflow-hidden`}>
+        {shouldLoadIframe ? (
+          <iframe
+            ref={iframeRef}
+            id="party-player-iframe"
+            src={playerURL}
+            className={`w-full h-full transition-transform duration-500 ease-out ${
+              isFillMode ? 'scale-[1.35] sm:scale-[1.1]' : 'scale-100'
+            }`}
+            allowFullScreen
+            allow="autoplay; encrypted-media"
+            title="Media Player"
+            frameBorder="0"
+          />
         ) : (
-          <div className="px-3 py-1 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg status-badge-pulse">
-            <span className={`size-1.5 bg-white rounded-full ${isSyncing ? 'animate-ping' : 'animate-pulse'}`} />
-            {isSyncing ? 'Syncing...' : 'Synced with Host'}
-          </div>
+          <div className="size-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
         )}
-
-        {isTV && (
-          <div className="px-3 py-1 bg-dark-100/80 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 shadow-lg text-indigo-300">
-            S{season} : E{uiEpisode}
-          </div>
-        )}
-
-        <button 
-           onClick={toggleFullscreen}
-           className={`px-3 py-1 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
-           title={isMobile ? (document.fullscreenElement ? (isFillMode ? "Fit Aspect" : "Fill Screen") : "Enter Fullscreen") : "Toggle Cinematic Fullscreen"}
-        >
-          <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            {isMobile ? (
-              !document.fullscreenElement ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              ) : isFillMode ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5" />
-              )
-            ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-            )}
-          </svg>
-          {isMobile ? (!document.fullscreenElement ? "Fullscreen" : (isFillMode ? "Fit" : "Fill")) : "Fullscreen"}
-        </button>
       </div>
 
-      <ChatOverlay 
-        messages={chatMessages} 
-        roomCode={roomCode} 
-        user={user} 
-        isCinematic={isCinematic}
-        isVisible={isChatVisible}
-      />
+      {/* UI Overlay Layer (Always Anchored to Screen) */}
+      <div className={`absolute inset-0 z-10 pointer-events-none flex flex-col`}>
+        
+        {/* Cinematic Top Bar */}
+        <div className={`pt-safe px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/80 via-black/40 to-transparent ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onLeaveParty}
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all hover:scale-110 active:scale-90"
+            >
+              <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(roomCode);
+                alert("Room Code Copied!");
+              }}
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-light-200 transition-all hover:scale-105 active:scale-95 border border-white/5 flex items-center gap-2"
+            >
+              <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+              </svg>
+              <span className="font-mono text-sm uppercase tracking-tighter hidden sm:block">{roomCode}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsChatVisible(!isChatVisible)}
+              className={`transition-all hover:scale-110 active:scale-95 flex items-center justify-center ${isChatVisible ? 'text-indigo-400' : 'text-white/40 hover:text-white'}`}
+              title={isChatVisible ? "Hide Chat" : "Show Chat"}
+            >
+              <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
+              <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+              <span className="text-white font-black text-sm tracking-tighter">{(partyMembers?.length || 1)}</span>
+              <svg className="size-4 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Middle Spacer */}
+        <div className="flex-1" />
+
+        {/* Bottom Controls Area */}
+        <div className={`pb-safe px-6 py-6 transition-all duration-500 transform pointer-events-auto flex items-end justify-between ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}>
+          <div className="flex gap-2">
+            {isHost ? (
+              <div className="px-3 py-1.5 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
+                <span className="size-1.5 bg-white rounded-full shadow-[0_0_5px_white]" />
+                Host
+              </div>
+            ) : (
+              <div className="px-3 py-1.5 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg status-badge-pulse">
+                <span className={`size-1.5 bg-white rounded-full ${isSyncing ? 'animate-ping' : 'animate-pulse'}`} />
+                {isSyncing ? 'Syncing...' : 'Synced'}
+              </div>
+            )}
+
+            {isTV && (
+              <div className="px-3 py-1.5 bg-dark-100/80 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 shadow-lg text-indigo-300">
+                S{season} : E{uiEpisode}
+              </div>
+            )}
+
+            <button 
+               onClick={toggleFullscreen}
+               className={`px-3 py-1.5 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
+               title={isMobile ? (isFullscreen ? (isFillMode ? "Fit Aspect" : "Fill Screen") : "Enter Fullscreen") : "Toggle Cinematic Fullscreen"}
+            >
+              <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isMobile ? (
+                  !isFullscreen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  ) : isFillMode ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5" />
+                  )
+                ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                )}
+              </svg>
+              {isMobile ? (!isFullscreen ? "Fullscreen" : (isFillMode ? "Fit" : "Fill")) : "Fullscreen"}
+            </button>
+          </div>
+        </div>
+
+        {/* Chat Overlay (Positioned Absolutely over UI Layer) */}
+        <div className={`fixed bottom-24 right-6 sm:right-10 z-[60] pointer-events-auto pr-safe pb-safe ${isChatVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'} transition-all duration-300`}>
+          <ChatOverlay 
+            messages={chatMessages} 
+            roomCode={roomCode} 
+            user={user} 
+            isCinematic={isCinematic}
+            isVisible={true} // Visibility handled by parent container for better animations
+          />
+        </div>
+
+      </div>
 
     </div>
   );
