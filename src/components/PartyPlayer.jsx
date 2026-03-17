@@ -389,7 +389,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         <div className="flex-1" />
 
         {/* Floating Overlays Layer (Chat and Sync Status) */}
-        <div className="relative pointer-events-none pb-safe">
+        <div className="relative pointer-events-none pb-2">
             {/* Sync Status Badge (Bottom Left, above player controls) */}
             <div className={`absolute bottom-20 left-6 z-[60] flex flex-wrap gap-2 transition-all duration-500 ${showControls || (!isFullscreen && !isCinematic) ? 'opacity-100' : 'opacity-0'}`}>
               {isHost ? (
@@ -434,19 +434,23 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
       {/* 4️⃣ FEEDBACK LAYER: z-40 (Netflix style pulses) */}
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-40 pointer-events-none flex items-center justify-between px-[15%]">
         <div className={`text-white font-black text-xl flex flex-col items-center justify-center gap-2 transition-all duration-300 ${seekFeedback === 'left' ? 'scale-125 opacity-100' : 'scale-75 opacity-0'}`}>
-           <div className="size-16 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
-             <span className="text-3xl">⏪</span>
+           <div className="size-16 bg-indigo-500/30 backdrop-blur-xl rounded-full flex items-center justify-center border border-indigo-400/50 shadow-[0_0_30px_rgba(99,102,241,0.5)]">
+             <svg className="size-8 text-white opacity-90 drop-shadow-[0_2px_10px_rgba(255,255,255,0.3)] ml-[-0.25rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+             </svg>
            </div>
-           -10s
+           <span className="drop-shadow-lg">-10s</span>
         </div>
 
 
 
         <div className={`text-white font-black text-xl flex flex-col items-center justify-center gap-2 transition-all duration-300 ${seekFeedback === 'right' ? 'scale-125 opacity-100' : 'scale-75 opacity-0'}`}>
-           <div className="size-16 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
-             <span className="text-3xl">⏩</span>
+           <div className="size-16 bg-indigo-500/30 backdrop-blur-xl rounded-full flex items-center justify-center border border-indigo-400/50 shadow-[0_0_30px_rgba(99,102,241,0.5)]">
+             <svg className="size-8 text-white opacity-90 drop-shadow-[0_2px_10px_rgba(255,255,255,0.3)] ml-[0.25rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+             </svg>
            </div>
-           +10s
+           <span className="drop-shadow-lg">+10s</span>
         </div>
       </div>
 
