@@ -268,25 +268,22 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   // --- Gesture System (Elite Architecture) ---
   const lastTapRef = useRef(0);
 
-  const handleTap = (e, side) => {
+  const handlePointerEvent = (e, side) => {
     e.preventDefault();
     e.stopPropagation();
 
     const now = Date.now();
-    
-    // Ignore if it's potentially a double-tap
-    if (now - lastTapRef.current < 300) return;
+    const timeSinceLastTap = now - lastTapRef.current;
 
-    // Single tap behavior (Show/Hide Controls)
-    setShowControls(prev => !prev);
-
-    lastTapRef.current = now;
-  };
-
-  const handleDoubleTap = (e, side) => {
-    e.preventDefault();
-    e.stopPropagation();
-    triggerSeek(side);
+    if (timeSinceLastTap < 300) {
+      // It's a double tap!
+      triggerSeek(side);
+      lastTapRef.current = 0; // Reset to prevent 3rd tap from skipping again
+    } else {
+      // It's a single tap (or first half of a double tap)
+      setShowControls(prev => !prev);
+      lastTapRef.current = now;
+    }
   };
 
   const gestureZoneClass = "absolute inset-y-0 h-full pointer-events-auto cursor-pointer";
@@ -325,16 +322,16 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         {/* Left Zone - 30% */}
         <div 
           className="w-[30%] h-full pointer-events-auto cursor-pointer"
-          onClick={(e) => handleTap(e, 'left')}
-          onDoubleClick={(e) => handleDoubleTap(e, 'left')}
+          onPointerUp={(e) => handlePointerEvent(e, 'left')}
+          onClick={(e) => e.preventDefault()} // Ensure click doesn't bubble if pointerUp is handled
         />
         {/* Center Zone - 40% (Native Passthrough for Play/Pause) */}
         <div className="w-[40%] h-full pointer-events-none" />
         {/* Right Zone - 30% */}
         <div 
           className="w-[30%] h-full pointer-events-auto cursor-pointer"
-          onClick={(e) => handleTap(e, 'right')}
-          onDoubleClick={(e) => handleDoubleTap(e, 'right')}
+          onPointerUp={(e) => handlePointerEvent(e, 'right')}
+          onClick={(e) => e.preventDefault()}
         />
       </div>
 
