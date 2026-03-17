@@ -339,7 +339,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
       <div className={`absolute inset-0 z-30 pointer-events-none flex flex-col`}>
         
         {/* Cinematic Top Bar (Safe padding ensures no clipping) */}
-        <div className={`pt-safe px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/90 via-black/40 to-transparent ${showControls || (!isFullscreen && !isCinematic) ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
+        <div className={`pt-2 px-6 py-4 flex items-center justify-between transition-all duration-500 transform pointer-events-auto bg-linear-to-b from-black/90 via-black/40 to-transparent ${showControls || (!isFullscreen && !isCinematic) ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
           <div className="flex items-center gap-4">
             <button 
               onClick={(e) => {
