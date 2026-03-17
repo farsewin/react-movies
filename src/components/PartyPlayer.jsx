@@ -128,33 +128,34 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     ? `https://vidfast.pro/tv/${tmdbId}/${season}/${iframeEpisode}?autoPlay=true&nextButton=true&autoNext=false`
     : `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`;
 
-  // Desktop Spacebar Control
-  const togglePlayPause = () => {
+  // Desktop Arrow Control
+  const triggerSeek = (side) => {
     const player = iframeRef.current?.contentWindow;
     if (!player) return;
 
-    if (roomState?.playback_status === 'play') {
-      player.postMessage({ command: "pause" }, "*");
-      if (isHost) syncRoomState(roomDocId || roomCode, 'pause', viewerCurrentTimeRef.current, { episode: uiEpisode });
-    } else {
-      player.postMessage({ command: "play" }, "*");
-      if (isHost) syncRoomState(roomDocId || roomCode, 'play', viewerCurrentTimeRef.current, { episode: uiEpisode });
-    }
+    const delta = side === 'left' ? -10 : 10;
     
-    setSeekFeedback('center');
+    setSeekFeedback(side);
+    player.postMessage({ command: "seek", time: Math.floor((viewerCurrentTimeRef.current || 0) + delta) }, "*");
+    
     setTimeout(() => setSeekFeedback(null), 300);
   };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === "Space" && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      
+      if (e.code === "ArrowLeft") {
         e.preventDefault();
-        togglePlayPause();
+        triggerSeek('left');
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        triggerSeek('right');
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [roomState, isHost]);
+  }, []);
 
   // Listen for Player Events
   useEffect(() => {
@@ -183,7 +184,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
                  if (onNativeNavigation) onNativeNavigation(newEpisode);
               } else {
                  const status = (playerEvent === 'pause') ? 'pause' : 'play';
-                 syncRoomState(roomDocId || roomCode, status, currentTime, { episode: newEpisode });
+                 syncRoomState(roomDocId || roomCode, status, Math.floor(currentTime), { episode: newEpisode });
                  lastOutgoingSyncTimeRef.current = Date.now();
               }
             }
@@ -236,8 +237,13 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     if (playback_status !== lastSentCommandRef.current) {
       if (playback_status === "play") {
         player.postMessage({ command: "play" }, "*");
+        player.postMessage({ command: "playpause" }, "*");
+        if (iframeRef.current) {
+           try { iframeRef.current.click(); } catch(e) {}
+        }
       } else {
         player.postMessage({ command: "pause" }, "*");
+        player.postMessage({ command: "playpause" }, "*");
       }
       lastSentCommandRef.current = playback_status;
     }
@@ -247,10 +253,11 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     const drift = Math.abs(viewerCurrentTimeRef.current - expectedTime);
 
     const threshold = isMobile ? 6 : 4;
-    const cooldown = isMobile ? 3000 : 2000;
+    const cooldown = isMobile ? 4000 : 2500; // Increased cooldown to prevent command spam
 
     if (drift > threshold && drift < 300 && !isSyncing) {
       setIsSyncing(true);
+      // Official Docs: "Seek commands accept time in seconds (integer values)"
       player.postMessage({ command: "seek", time: Math.floor(expectedTime) }, "*");
       setTimeout(() => setIsSyncing(false), cooldown);
     }
@@ -270,12 +277,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     // Ignore if it's potentially a double-tap
     if (now - lastTapRef.current < 300) return;
 
-    // Single tap behavior
-    if (side === 'middle') {
-      togglePlayPause();
-    } else {
-      setShowControls(prev => !prev);
-    }
+    // Single tap behavior (Show/Hide Controls)
+    setShowControls(prev => !prev);
 
     lastTapRef.current = now;
   };
@@ -283,16 +286,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const handleDoubleTap = (e, side) => {
     e.preventDefault();
     e.stopPropagation();
-
-    const player = iframeRef.current?.contentWindow;
-    if (!player) return;
-
-    const delta = side === 'left' ? -10 : 10;
-    
-    setSeekFeedback(side);
-    player.postMessage({ command: "seek", time: Math.floor((viewerCurrentTimeRef.current || 0) + delta) }, "*");
-    
-    setTimeout(() => setSeekFeedback(null), 300);
+    triggerSeek(side);
   };
 
   const gestureZoneClass = "absolute inset-y-0 h-full pointer-events-auto cursor-pointer";
@@ -334,11 +328,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           onClick={(e) => handleTap(e, 'left')}
           onDoubleClick={(e) => handleDoubleTap(e, 'left')}
         />
-        {/* Center Zone - 40% */}
-        <div 
-          className="w-[40%] h-full pointer-events-auto cursor-pointer"
-          onClick={(e) => handleTap(e, 'middle')}
-        />
+        {/* Center Zone - 40% (Native Passthrough for Play/Pause) */}
+        <div className="w-[40%] h-full pointer-events-none" />
         {/* Right Zone - 30% */}
         <div 
           className="w-[30%] h-full pointer-events-auto cursor-pointer"
@@ -452,15 +443,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
            -10s
         </div>
 
-        <div className={`absolute left-1/2 -translate-x-1/2 transition-all duration-300 ${seekFeedback === 'center' ? 'scale-125 opacity-100' : 'scale-50 opacity-0'}`}>
-           <div className="size-24 bg-indigo-500/30 backdrop-blur-xl rounded-full flex items-center justify-center border border-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.5)]">
-             {roomState?.playback_status === 'play' ? (
-               <svg className="size-12 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-             ) : (
-               <svg className="size-12 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-             )}
-           </div>
-        </div>
+
 
         <div className={`text-white font-black text-xl flex flex-col items-center justify-center gap-2 transition-all duration-300 ${seekFeedback === 'right' ? 'scale-125 opacity-100' : 'scale-75 opacity-0'}`}>
            <div className="size-16 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
