@@ -23,9 +23,9 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
       if (!document.fullscreenElement) {
         // State 1: Enter Fullscreen
         containerRef.current.requestFullscreen().then(() => {
-          if (screen.orientation?.lock) {
-            screen.orientation.lock("landscape").catch(e => console.warn("Orientation lock failed:", e));
-          }
+            if (screen.orientation?.lock) {
+              screen.orientation.lock("landscape").catch(() => {});
+            }
         }).catch(err => {
           console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
@@ -61,6 +61,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const [showControls, setShowControls] = useState(true);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [isFillMode, setIsFillMode] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [seekFeedback, setSeekFeedback] = useState(null); // 'left', 'right', 'center'
   const controlsTimeoutRef = useRef(null);
   
   // Mobile Detection
@@ -128,7 +130,9 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     if (!tmdbId) return;
 
     const handleMessage = (event) => {
-      if (!vidfastOrigins.includes(event.origin) || !event.data) return;
+      // Robust origin check for any vidfast subdomain or TLD
+      const isVidfast = /vidfast\.(pro|in|io|me|net|pm|xyz)/.test(event.origin);
+      if (!isVidfast || !event.data) return;
 
       if (event.data.type === "PLAYER_EVENT") {
         const { event: playerEvent, currentTime, duration } = event.data.data;
@@ -155,7 +159,9 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
                  }
               } else {
                  const status = (playerEvent === 'pause') ? 'pause' : 'play';
-                 syncRoomState(roomDocId || roomCode, status, currentTime, { episode: newEpisode });
+                 syncRoomState(roomDocId || roomCode, status, currentTime, { 
+                   episode: newEpisode
+                 });
                  lastOutgoingSyncTimeRef.current = Date.now();
               }
             }
@@ -170,17 +176,22 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
             }
           }
         }
-      } else if (event.data.type === "MEDIA_DATA" && isHost && isTV) {
-        const mediaData = event.data.data;
-        const showKey = `t${tmdbId}`;
+      } else if (event.data.type === "MEDIA_DATA") {
+        // Doc Recommendation: Persist progress to localStorage
+        localStorage.setItem('vidFastProgress', JSON.stringify(event.data.data));
 
-        if (mediaData && mediaData[showKey]) {
-          const showData = mediaData[showKey];
-          const newEpisode = showData.last_episode_watched;
+        if (isHost && isTV) {
+          const mediaData = event.data.data;
+          const showKey = `t${tmdbId}`;
 
-          if (newEpisode && newEpisode > (displayedEpisode || uiEpisode)) {
-            if (onNativeNavigation) {
-              onNativeNavigation(newEpisode); // ONLY updates UI, does not reload iframe
+          if (mediaData && mediaData[showKey]) {
+            const showData = mediaData[showKey];
+            const newEpisode = showData.last_episode_watched;
+
+            if (newEpisode && newEpisode > (displayedEpisode || uiEpisode)) {
+              if (onNativeNavigation) {
+                onNativeNavigation(newEpisode); // ONLY updates UI, does not reload iframe
+              }
             }
           }
         }
@@ -214,7 +225,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     // 1. Buffering: Only send play/pause if it actually changed
     if (playback_status !== lastSentCommandRef.current) {
       if (playback_status === "play") {
-        player.postMessage({ command: "play" }, "*");
+        // Doc Recommendation: Send time with play for instant sync
+        player.postMessage({ command: "play", time: Math.floor(expectedTime) }, "*");
       } else {
         player.postMessage({ command: "pause" }, "*");
       }
@@ -234,7 +246,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     // Only seek if drift is > threshold AND we haven't synced in the last 'cooldown' ms
     if (drift > threshold && drift < 300 && !isSyncing) {
       setIsSyncing(true);
-      player.postMessage({ command: "seek", time: expectedTime }, "*");
+      player.postMessage({ command: "seek", time: Math.floor(expectedTime) }, "*");
       setTimeout(() => setIsSyncing(false), cooldown);
     }
 
@@ -260,19 +272,32 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
       if (x < width * 0.3) {
         // Left 30%: Rewind
-        player.postMessage({ command: "seek", time: viewerCurrentTimeRef.current - 10 }, "*");
+        setSeekFeedback('left');
+        player.postMessage({ command: "seek", time: Math.floor((viewerCurrentTimeRef.current || 0) - 10) }, "*");
       } else if (x > width * 0.7) {
         // Right 30%: Fast Forward
-        player.postMessage({ command: "seek", time: viewerCurrentTimeRef.current + 10 }, "*");
+        setSeekFeedback('right');
+        player.postMessage({ command: "seek", time: Math.floor((viewerCurrentTimeRef.current || 0) + 10) }, "*");
       } else {
         // Center 40%: Pause/Play
         const newStatus = roomState?.playback_status === 'play' ? 'pause' : 'play';
+        setSeekFeedback('center');
+        
+        // Doc Recommendation: Use play + time for instant response
+        if (newStatus === 'play') {
+          player.postMessage({ command: "play", time: Math.floor(viewerCurrentTimeRef.current || 0) }, "*");
+        } else {
+          player.postMessage({ command: "pause" }, "*");
+        }
+
+        // Host then syncs this to the room
         if (isHost) {
           syncRoomState(roomDocId || roomCode, newStatus, viewerCurrentTimeRef.current, { episode: uiEpisode });
-        } else {
-          player.postMessage({ command: newStatus }, "*");
         }
       }
+      
+      // Clear feedback after animation
+      setTimeout(() => setSeekFeedback(null), 600);
       lastTapRef.current = 0; // Reset
     } else {
       lastTapRef.current = now;
@@ -353,6 +378,17 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
             </button>
           </div>
 
+          <div className="flex flex-col items-center flex-1 mx-4 max-w-[40%] text-center">
+            <h2 className="text-white font-black text-sm sm:text-lg tracking-tight truncate w-full shadow-black drop-shadow-md">
+              {movie?.movie_title}
+            </h2>
+            {isTV && (
+              <p className="text-indigo-400 text-[10px] font-bold uppercase tracking-widest -mt-1 drop-shadow-sm">
+                Season {season} Episode {uiEpisode}
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsChatVisible(!isChatVisible)}
@@ -378,46 +414,125 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         <div className="flex-1" />
 
         {/* Bottom Controls Area */}
-        <div className={`pb-safe px-6 py-6 transition-all duration-500 transform pointer-events-auto flex items-end justify-between ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}>
-          <div className="flex gap-2">
-            {isHost ? (
-              <div className="px-3 py-1.5 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg status-badge-pulse">
-                <span className="size-1.5 bg-white rounded-full shadow-[0_0_5px_white]" />
-                Host
-              </div>
-            ) : (
-              <div className="px-3 py-1.5 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg status-badge-pulse">
-                <span className={`size-1.5 bg-white rounded-full ${isSyncing ? 'animate-ping' : 'animate-pulse'}`} />
-                {isSyncing ? 'Syncing...' : 'Synced'}
-              </div>
-            )}
+        <div className={`pb-safe px-6 py-6 transition-all duration-500 transform pointer-events-auto flex flex-col gap-4 ${showControls || !isFullscreen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}>
+          
+          {/* Cinematic Progress Bar */}
+          <div className="w-full flex flex-col gap-2 group/progress">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-mono text-white/40">
+                {new Date(viewerCurrentTimeRef.current * 1000).toISOString().substr(11, 8)}
+              </span>
+              <span className="text-[10px] font-mono text-white/40">
+                {roomState?.duration ? new Date(roomState.duration * 1000).toISOString().substr(11, 8) : '--:--:--'}
+              </span>
+            </div>
+            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden relative cursor-pointer">
+              <div 
+                className="absolute inset-y-0 left-0 bg-linear-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-300" 
+                style={{ width: `${roomState?.duration ? (viewerCurrentTimeRef.current / roomState.duration) * 100 : 0}%` }}
+              />
+              <div 
+                className="absolute top-1/2 -translate-y-1/2 size-2.5 bg-white rounded-full shadow-[0_0_10px_white] opacity-0 group-hover/progress:opacity-100 transition-opacity"
+                style={{ left: `${roomState?.duration ? (viewerCurrentTimeRef.current / roomState.duration) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
 
-            {isTV && (
-              <div className="px-3 py-1.5 bg-dark-100/80 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 shadow-lg text-indigo-300">
-                S{season} : E{uiEpisode}
-              </div>
-            )}
+          <div className="flex items-end justify-between w-full">
+            <div className="flex items-center gap-3">
+              {isHost ? (
+                <div className="px-3 py-1.5 bg-amber-500/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-amber-400/20 shadow-lg">
+                  <span className="size-1.5 bg-white rounded-full shadow-[0_0_5px_white]" />
+                  Host
+                </div>
+              ) : (
+                <div className="px-3 py-1.5 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg">
+                  <span className={`size-1.5 bg-white rounded-full ${isSyncing ? 'animate-ping' : 'animate-pulse'}`} />
+                  {isSyncing ? 'Syncing...' : 'Synced'}
+                </div>
+              )}
 
-            <button 
-               onClick={toggleFullscreen}
-               className={`px-3 py-1.5 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
-               title={isMobile ? (isFullscreen ? (isFillMode ? "Fit Aspect" : "Fill Screen") : "Enter Fullscreen") : "Toggle Cinematic Fullscreen"}
-            >
-              <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {isMobile ? (
-                  !isFullscreen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  ) : isFillMode ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              {isTV && (
+                <div className="px-3 py-1.5 bg-white/5 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 shadow-lg text-indigo-300">
+                  S{season} : E{uiEpisode}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/5">
+                <button 
+                  onClick={() => {
+                    const nextMuteState = !isMuted;
+                    setIsMuted(nextMuteState);
+                    // Doc Recommendation: Use specific mute command
+                    iframeRef.current?.contentWindow?.postMessage({ 
+                      command: "mute", 
+                      muted: nextMuteState 
+                    }, "*");
+                  }}
+                  className={`p-1.5 transition-all hover:scale-110 active:scale-90 ${isMuted ? 'text-red-400' : 'text-white/60 hover:text-white'}`}
+                  title={isMuted ? "Unmute" : "Mute"}
+                >
+                  {isMuted ? (
+                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
                   ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5" />
-                  )
-                ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                )}
-              </svg>
-              {isMobile ? (!isFullscreen ? "Fullscreen" : (isFillMode ? "Fit" : "Fill")) : "Fullscreen"}
-            </button>
+                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
+
+                <button 
+                  onClick={() => {
+                    const player = iframeRef.current?.contentWindow;
+                    // Try common variations since doc is minimal
+                    player?.postMessage({ command: "subtitles" }, "*");
+                    player?.postMessage({ command: "captions" }, "*");
+                    player?.postMessage({ command: "toggleCaptions" }, "*");
+                    player?.postMessage({ command: "toggle-captions" }, "*");
+                  }}
+                  className="p-1.5 text-white/40 hover:text-white transition-all hover:scale-110 active:scale-95" 
+                  title="Toggle Subtitles"
+                >
+                  <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    const player = iframeRef.current?.contentWindow;
+                    // Try common variations
+                    player?.postMessage({ command: "settings" }, "*");
+                    player?.postMessage({ command: "toggleSettings" }, "*");
+                    player?.postMessage({ command: "toggle-settings" }, "*");
+                    player?.postMessage({ command: "showSettings" }, "*");
+                  }}
+                  className="p-1.5 text-white/40 hover:text-white transition-all hover:scale-110 active:scale-95" 
+                  title="Player Settings"
+                >
+                  <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
+
+              <button 
+                 onClick={toggleFullscreen}
+                 className={`px-3 py-1.5 backdrop-blur-sm rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all hover:scale-105 active:scale-95 ${isFillMode ? 'bg-indigo-600/90 border-indigo-400/20 text-white' : 'bg-white/5 hover:bg-white/10 border-white/10 text-light-200'}`}
+                 title={isMobile ? (isFullscreen ? (isFillMode ? "Fit Aspect" : "Fill Screen") : "Enter Fullscreen") : "Toggle Cinematic Fullscreen"}
+              >
+                <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                {isMobile ? (!isFullscreen ? "Fullscreen" : (isFillMode ? "Fit" : "Fill")) : "Fullscreen"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -433,6 +548,47 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         </div>
 
       </div>
+
+      {/* 4️⃣ FEEDBACK LAYER: Double-tap or Play/Pause animations */}
+      <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
+        {/* Seek Feedback (Left/Right) */}
+        {seekFeedback === 'left' && (
+          <div className="absolute left-[15%] flex flex-col items-center gap-2">
+            <div className="size-20 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 animate-seek-pulse">
+               <svg className="size-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                 <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-7 4.666a1 1 0 000 1.664l7 4.666z" />
+               </svg>
+            </div>
+            <span className="text-white font-black text-xl tracking-tighter animate-fade-in">-10s</span>
+          </div>
+        )}
+        {seekFeedback === 'right' && (
+          <div className="absolute right-[15%] flex flex-col items-center gap-2">
+            <div className="size-20 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 animate-seek-pulse">
+               <svg className="size-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                 <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l7-4.666a1 1 0 000-1.664l-7-4.666A1 1 0 0010 6v2.798L4.555 5.168z" />
+               </svg>
+            </div>
+            <span className="text-white font-black text-xl tracking-tighter animate-fade-in">+10s</span>
+          </div>
+        )}
+        
+        {/* Play/Pause Pulse (Center) */}
+        {seekFeedback === 'center' && (
+           <div className="size-32 bg-indigo-500/20 backdrop-blur-xl rounded-full flex items-center justify-center border border-indigo-500/40 animate-play-pulse">
+              {roomState?.playback_status === 'play' ? (
+                <svg className="size-16 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="size-16 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              )}
+           </div>
+        )}
+      </div>
+
     </div>
   );
 });
