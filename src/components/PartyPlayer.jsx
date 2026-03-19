@@ -227,7 +227,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     const heartbeatInterval = setInterval(() => {
       const currentTime = viewerCurrentTimeRef.current || 0;
       syncRoomState(roomDocId, roomState?.playback_status || 'play', currentTime, { episode: uiEpisode });
-    }, 120000);
+    }, 10000); // Sync every 10 seconds to tightly track Host buffering
     return () => clearInterval(heartbeatInterval);
   }, [isHost, roomDocId, uiEpisode, roomState?.playback_status]);
 
@@ -254,7 +254,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     const threshold = isMobile ? 6 : 4;
     const cooldown = isMobile ? 4000 : 2500; // Increased cooldown to prevent command spam
 
-    if (drift > threshold && drift < 300 && !isSyncing) {
+    if (drift > threshold && !isSyncing) {
       setIsSyncing(true);
       // Official Docs: "Seek commands accept time in seconds (integer values)"
       player.postMessage({ command: "seek", time: Math.floor(expectedTime) }, "*");
