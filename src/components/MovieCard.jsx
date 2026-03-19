@@ -1,9 +1,12 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useCreateParty } from '../hooks/useCreateParty'
 import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
+import Spinner from './Spinner.jsx'
 
 const MovieCard = React.memo(({ movie }) => {
   const { handleCreateParty, isCreating } = useCreateParty();
+  const [imgLoading, setImgLoading] = useState(!!movie.poster_path);
+  const [imgError, setImgError] = useState(false);
   // TV Shows use 'name' and 'first_air_date', Movies use 'title' and 'release_date'
   const title = movie.title || movie.name;
   const date = movie.release_date || movie.first_air_date;
@@ -28,7 +31,24 @@ const MovieCard = React.memo(({ movie }) => {
           alt={title}
           className="w-full aspect-[2/3] object-cover transition-transform duration-500 group-hover:scale-110"
           loading="lazy"
+          onLoad={() => setImgLoading(false)}
+          onError={() => { setImgError(true); setImgLoading(false); }}
         />
+
+        {/* Spinner while image is loading */}
+        {imgLoading && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/30">
+            <Spinner />
+          </div>
+        )}
+
+        {/* Spinner overlay when creating a party from this card */}
+        {isCreating && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50">
+            <Spinner />
+          </div>
+        )}
+
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
            <div className="bg-indigo-600 p-4 rounded-full scale-75 group-hover:scale-100 transition-transform duration-300">
               <svg className="size-6 text-white" fill="currentColor" viewBox="0 0 20 20">

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Spinner from './Spinner.jsx';
 import { useNavigate } from 'react-router-dom';
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
@@ -9,13 +10,18 @@ const RoomCard = ({ room }) => {
   const { room_code, movie_title, poster_url, creator_name, media_type, movie_id } = room;
   const [fetchedPoster, setFetchedPoster] = useState(null);
   const [imageError, setImageError] = useState(false);
+  const [posterLoading, setPosterLoading] = useState(false);
 
   useEffect(() => {
     // If we already have a poster URL, no need to fetch
-    if (poster_url) return;
+    if (poster_url) {
+      setPosterLoading(false);
+      return;
+    }
 
     // Fetch poster from TMDB if missing
     const fetchPoster = async () => {
+      setPosterLoading(true);
       try {
         const type = media_type || 'movie';
         const response = await fetch(`${API_BASE_URL}/${type}/${movie_id}`, {
@@ -33,6 +39,8 @@ const RoomCard = ({ room }) => {
         }
       } catch (error) {
         console.error("Error fetching poster for room card:", error);
+      } finally {
+        setPosterLoading(false);
       }
     };
 
@@ -59,12 +67,21 @@ const RoomCard = ({ room }) => {
       {/* Poster Section */}
       <div className="relative aspect-[2/3] overflow-hidden bg-dark-100 flex items-center justify-center">
         {currentPoster && !imageError ? (
-          <img 
-            src={currentPoster} 
-            alt={movie_title}
-            onError={() => setImageError(true)}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
+          <>
+            <img 
+              src={currentPoster} 
+              alt={movie_title}
+              onLoad={() => setPosterLoading(false)}
+              onError={() => { setImageError(true); setPosterLoading(false); }}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            />
+
+            {posterLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+                <Spinner />
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center p-6 text-center">
             <svg className="size-16 text-white/10 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
