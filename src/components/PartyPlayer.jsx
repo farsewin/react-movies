@@ -303,7 +303,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
             ref={iframeRef}
             id="party-player-iframe"
             src={playerURL}
-            className={`w-full h-full transition-transform duration-500 ease-out ${isHost ? 'pointer-events-auto' : 'pointer-events-none select-none'} ${
+            className={`w-full h-full transition-transform duration-500 ease-out pointer-events-auto ${
               fsState === 2 ? 'scale-[1.4] sm:scale-[1.15] object-cover' : 'scale-100'
             }`}
             allowFullScreen
@@ -316,9 +316,9 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         )}
       </div>
 
-      {/* 1.5️⃣ VIEWER SLAVE OVERLAY: Blocks native iframe clicks entirely but allows UI toggling */}
+      {/* 1.5️⃣ VIEWER SLAVE OVERLAY: Blocks native iframe clicks on Left 70%, exposes Right 30% for Quality/Subtitles */}
       {!isHost && (
-        <div className="absolute inset-0 z-10 pointer-events-auto" onClick={(e) => {
+        <div className="absolute inset-y-0 left-0 w-[70%] z-10 pointer-events-auto" onClick={(e) => {
            e.preventDefault();
            e.stopPropagation();
            setShowControls(prev => !prev);
@@ -336,11 +336,15 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         {/* Center Zone - 40% (Native Passthrough for Play/Pause) */}
         <div className="w-[40%] h-full pointer-events-none" />
         {/* Right Zone - 30% */}
-        <div 
-          className="w-[30%] h-full pointer-events-auto cursor-pointer"
-          onPointerUp={(e) => handlePointerEvent(e, 'right')}
-          onClick={(e) => e.preventDefault()}
-        />
+        {isHost ? (
+          <div 
+            className="w-[30%] h-full pointer-events-auto cursor-pointer"
+            onPointerUp={(e) => handlePointerEvent(e, 'right')}
+            onClick={(e) => e.preventDefault()}
+          />
+        ) : (
+          <div className="w-[30%] h-full pointer-events-none" />
+        )}
       </div>
 
       {/* 3️⃣ UI OVERLAY LAYER: z-30 */}
