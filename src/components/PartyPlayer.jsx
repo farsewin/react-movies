@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { updateWatchProgress, syncRoomState } from '../services/appwrite';
 import ChatOverlay from './ChatOverlay';
+import VoiceChatOverlay from './VoiceChatOverlay';
 
 const vidfastOrigins = [
   "https://vidfast.pro",
@@ -12,7 +13,7 @@ const vidfastOrigins = [
   "https://vidfast.xyz"
 ];
 
-const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, localEpisode, displayedEpisode, onLocalEpisodeChange, onNativeNavigation, chatMessages, partyMembers, isCinematic, onLeaveParty }, ref) => {
+const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, localEpisode, displayedEpisode, onLocalEpisodeChange, onNativeNavigation, chatMessages, partyMembers, isCinematic, onLeaveParty, voiceChatProps }, ref) => {
   const iframeRef = useRef(null);
   const containerRef = useRef(null);
   
@@ -400,7 +401,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
         {/* Middle Spacer */}
         <div className="flex-1" />
 
-        {/* Floating Overlays Layer (Chat and Sync Status) */}
+        {/* Floating Overlays Layer (Chat, Sync Status, Voice Chat) */}
         <div className="relative pointer-events-none pb-2">
             {/* Sync Status Badge (Bottom Left, above player controls) */}
             <div className={`absolute bottom-20 left-6 z-[60] flex flex-wrap gap-2 transition-all duration-500 ${showControls || (!isFullscreen && !isCinematic) ? 'opacity-100' : 'opacity-0'}`}>
@@ -416,6 +417,18 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
                 </div>
               )}
             </div>
+
+            {/* Voice Chat Overlay (speaking avatars + mute button) */}
+            {voiceChatProps && (
+              <VoiceChatOverlay
+                isConnected={voiceChatProps.isConnected}
+                isMuted={voiceChatProps.isMuted}
+                toggleMute={voiceChatProps.toggleMute}
+                speakingParticipants={voiceChatProps.speakingParticipants}
+                participants={voiceChatProps.participants}
+                showControls={showControls || (!isFullscreen && !isCinematic)}
+              />
+            )}
 
             {/* Auto-Fullscreen Button (Mobile/Cinematic) */}
             <div className={`absolute bottom-20 right-6 z-[60] flex items-center gap-2 transition-all duration-500 pointer-events-auto ${showControls || (!isFullscreen && !isCinematic) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>

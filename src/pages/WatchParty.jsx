@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getWatchParty, joinWatchParty, syncRoomState, deleteWatchParty } from '../services/appwrite'
 import { useWatchParty } from '../hooks/useWatchParty'
+import { useVoiceChat } from '../hooks/useVoiceChat'
 import { useUser } from '../context/UserContext.jsx'
 import Spinner from '../components/Spinner'
 import { PlayerSkeleton } from '../components/Skeleton'
@@ -20,6 +21,9 @@ const WatchParty = () => {
   const [totalEpisodes, setTotalEpisodes] = useState(null);
   const { partyMembers, roomState, chatMessages } = useWatchParty(roomCode)
   const isHost = user?.$id === party?.creator_id && !!party?.creator_id;
+
+  // Voice chat — connects once party and user are confirmed loaded
+  const voiceChatProps = useVoiceChat(roomCode, user, !!party && !!user);
   
   // States to keep UI in sync while preventing iframe reloads
   const [displayedEpisode, setDisplayedEpisode] = useState(1); // For header/counter
@@ -297,6 +301,7 @@ const WatchParty = () => {
                onLeaveParty={handleLeaveRoom}
                displayedEpisode={displayedEpisode}
                localEpisode={playerEpisode}
+               voiceChatProps={voiceChatProps}
                onLocalEpisodeChange={(ep) => {
                  setDisplayedEpisode(ep);
                  setPlayerEpisode(ep);
