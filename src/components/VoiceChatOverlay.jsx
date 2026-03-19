@@ -75,12 +75,8 @@ const VoiceChatOverlay = ({
         </div>
       )}
 
-      {/* === Mute / Unmute Button (always visible, bottom-left, above sync badge) === */}
-      <div
-        className={`absolute bottom-[5.5rem] left-6 z-[65] pointer-events-auto transition-all duration-500 ${
-          showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
-        }`}
-      >
+      {/* === Mute / Unmute Button — always visible for BOTH host and viewer === */}
+      <div className="absolute bottom-[5.5rem] left-6 z-[65] pointer-events-auto">
         <button
           onClick={toggleMute}
           title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
