@@ -63,6 +63,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
   const [shouldLoadIframe, setShouldLoadIframe] = useState(false);
   const lastSentCommandRef = useRef(null);
   const lastOutgoingSyncTimeRef = useRef(0);
+  const localLastStateRef = useRef(null);
   const [showControls, setShowControls] = useState(true);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [seekFeedback, setSeekFeedback] = useState(null); // 'left', 'right', 'center'
@@ -143,6 +144,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (!isHost) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       
       if (e.code === "ArrowLeft") {
@@ -174,19 +176,21 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           const timeSinceLastBroadcast = now - lastSyncBroadcastRef.current;
 
           if (playerEvent === "play" || playerEvent === "pause" || playerEvent === "seeked" || playerEvent === "next") {
-            if (playerEvent === "pause" && now - lastOutgoingSyncTimeRef.current < 2000) return;
+            const newEpisode = playerEvent === "next" ? uiEpisode + 1 : uiEpisode;
 
-            if (timeSinceLastBroadcast > 500 || playerEvent === "next") {
-              lastSyncBroadcastRef.current = now;
-              const newEpisode = playerEvent === "next" ? uiEpisode + 1 : uiEpisode;
+            if (playerEvent === "next") {
+               if (onNativeNavigation) onNativeNavigation(newEpisode);
+            } else {
+               let status = localLastStateRef.current || roomState?.playback_status || 'play';
+               if (playerEvent === 'pause') status = 'pause';
+               if (playerEvent === 'play') status = 'play';
 
-              if (playerEvent === "next") {
-                 if (onNativeNavigation) onNativeNavigation(newEpisode);
-              } else {
-                 const status = (playerEvent === 'pause') ? 'pause' : 'play';
+               // Only sync if the state actually changes, or if it's a scrub/seek action
+               if (playerEvent === "seeked" || localLastStateRef.current !== status) {
+                 localLastStateRef.current = status;
                  syncRoomState(roomDocId || roomCode, status, Math.floor(currentTime), { episode: newEpisode });
                  lastOutgoingSyncTimeRef.current = Date.now();
-              }
+               }
             }
           }
 
@@ -237,13 +241,8 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
     if (playback_status !== lastSentCommandRef.current) {
       if (playback_status === "play") {
         player.postMessage({ command: "play" }, "*");
-        player.postMessage({ command: "playpause" }, "*");
-        if (iframeRef.current) {
-           try { iframeRef.current.click(); } catch(e) {}
-        }
       } else {
         player.postMessage({ command: "pause" }, "*");
-        player.postMessage({ command: "playpause" }, "*");
       }
       lastSentCommandRef.current = playback_status;
     }
@@ -277,7 +276,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
 
     if (timeSinceLastTap < 300) {
       // It's a double tap!
-      triggerSeek(side);
+      if (isHost) triggerSeek(side);
       lastTapRef.current = 0; // Reset to prevent 3rd tap from skipping again
     } else {
       // It's a single tap (or first half of a double tap)
@@ -304,7 +303,7 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
             ref={iframeRef}
             id="party-player-iframe"
             src={playerURL}
-            className={`w-full h-full transition-transform duration-500 ease-out pointer-events-auto ${
+            className={`w-full h-full transition-transform duration-500 ease-out ${isHost ? 'pointer-events-auto' : 'pointer-events-none select-none'} ${
               fsState === 2 ? 'scale-[1.4] sm:scale-[1.15] object-cover' : 'scale-100'
             }`}
             allowFullScreen
@@ -316,6 +315,15 @@ const PartyPlayer = forwardRef(({ movie, roomCode, roomDocId, user, roomState, l
           <div className="size-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
         )}
       </div>
+
+      {/* 1.5️⃣ VIEWER SLAVE OVERLAY: Blocks native iframe clicks entirely but allows UI toggling */}
+      {!isHost && (
+        <div className="absolute inset-0 z-10 pointer-events-auto" onClick={(e) => {
+           e.preventDefault();
+           e.stopPropagation();
+           setShowControls(prev => !prev);
+        }} />
+      )}
 
       {/* 2️⃣ GESTURE LAYER: z-20 (Top 75% interactive, Bottom 25% passthrough) */}
       <div className="absolute inset-x-0 top-0 h-[75%] z-20 pointer-events-none flex">
