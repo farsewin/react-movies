@@ -22,6 +22,7 @@ const WatchParty = () => {
   const navigate = useNavigate();
   const [party, setParty] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSeasonLoading, setIsSeasonLoading] = useState(false);
   const [totalEpisodes, setTotalEpisodes] = useState(null);
   const { partyMembers, roomState, chatMessages } = useWatchParty(roomCode);
   const isHost = user?.$id === party?.creator_id && !!party?.creator_id;
@@ -58,7 +59,7 @@ const WatchParty = () => {
         setPlayerEpisode(ep);
       }
     }
-  }, [roomState?.episode, party?.episode, isHost]);
+  }, [roomState?.episode, party?.episode, isHost, displayedEpisode, playerEpisode]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode);
@@ -264,7 +265,7 @@ const WatchParty = () => {
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[10px] text-light-200 uppercase font-bold">
-                        Episode {totalEpisodes ? `/ ${totalEpisodes}` : ""}
+                        Episode {isSeasonLoading ? "Loading..." : totalEpisodes ? `/ ${totalEpisodes}` : ""}
                       </span>
                       <div className="flex items-center gap-2">
                         <input
