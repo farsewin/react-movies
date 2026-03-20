@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getWatchParty,
@@ -9,7 +9,6 @@ import {
 import { useWatchParty } from "../hooks/useWatchParty";
 import { useVoiceChat } from "../hooks/useVoiceChat";
 import { useUser } from "../context/UserContext.jsx";
-import Spinner from "../components/Spinner";
 import { PlayerSkeleton } from "../components/Skeleton";
 import PartyPlayer from "../components/PartyPlayer";
 import PartyMembers from "../components/PartyMembers";
@@ -34,7 +33,6 @@ const WatchParty = () => {
   const [displayedEpisode, setDisplayedEpisode] = useState(1); // For header/counter
   const [playerEpisode, setPlayerEpisode] = useState(1); // For iframe src
   const [copySuccess, setCopySuccess] = useState(false);
-  const [isSeasonLoading, setIsSeasonLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(
     !!document.fullscreenElement,
   );
