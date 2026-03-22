@@ -3,7 +3,7 @@ import { useCreateParty } from '../hooks/useCreateParty'
 import WatchWithFriendsButton from './WatchWithFriendsButton.jsx'
 import Spinner from './Spinner.jsx'
 
-const MovieCard = React.memo(({ movie }) => {
+const MovieCard = React.memo(({ movie, onDetailsClick }) => {
   const { handleCreateParty, isCreating } = useCreateParty();
   const [imgLoading, setImgLoading] = useState(!!movie.poster_path);
   const [imgError, setImgError] = useState(false);
@@ -14,7 +14,11 @@ const MovieCard = React.memo(({ movie }) => {
 
   const onCardClick = (e) => {
     e.preventDefault();
-    handleCreateParty(movie);
+    if (onDetailsClick) {
+      onDetailsClick(movie);
+    } else {
+      handleCreateParty(movie);
+    }
   };
 
   return (

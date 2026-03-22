@@ -8,18 +8,8 @@ import AuthModal from '../components/AuthModal.jsx'
 import { useDebounce } from 'react-use'
 import { updateSearchCount, logout } from '../services/appwrite.js'
 import { useUser } from '../context/UserContext.jsx'
-
-const API_BASE_URL = 'https://api.themoviedb.org/3';
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
-
-const API_OPTIONS = {
-  method: 'GET',
-  headers: {
-    accept: 'application/json',
-    Authorization: `Bearer ${API_KEY}`
-  }
-}
-
+import { fetchPopularMedia, searchMedia, fetchTrendingMedia } from '../services/tmdb'
+import MovieDetailsModal from '../components/MovieDetailsModal'
 import { useCreateParty } from '../hooks/useCreateParty'
 
 const Home = () => {
@@ -34,6 +24,8 @@ const Home = () => {
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [trendingTimeWindow, setTrendingTimeWindow] = useState('day'); // 'day' or 'week'
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm])
 
@@ -41,17 +33,14 @@ const Home = () => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const endpoint = query
-        ? `${API_BASE_URL}/search/${mediaType}?query=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/${mediaType}/popular`;
+      const results = query 
+        ? await searchMedia(query, mediaType)
+        : await fetchPopularMedia(mediaType);
 
-      const response = await fetch(endpoint, API_OPTIONS);
-      if(!response.ok) throw new Error(`Failed to fetch ${mediaType === 'movie' ? 'movies' : 'TV shows'}`);
-      const data = await response.json();
-      setMediaList(data.results || []);
+      setMediaList(results);
       
-      if(query && data.results.length > 0) {
-        await updateSearchCount(query, data.results[0]);
+      if(query && results.length > 0) {
+        await updateSearchCount(query, results[0]);
       }
     } catch (error) {
       console.error(`Error fetching media: ${error}`);
@@ -63,11 +52,8 @@ const Home = () => {
 
   const loadTrendingMovies = async () => {
     try {
-      const endpoint = `${API_BASE_URL}/trending/${mediaType}/${trendingTimeWindow}`;
-      const response = await fetch(endpoint, API_OPTIONS);
-      if(!response.ok) throw new Error("Failed to fetch trending");
-      const data = await response.json();
-      setTrendingMovies(data.results.slice(0, 10) || []);
+      const results = await fetchTrendingMedia(mediaType, trendingTimeWindow);
+      setTrendingMovies(results.slice(0, 10));
     } catch (error) {
       console.error(`Error fetching trending content: ${error}`);
     }
@@ -77,6 +63,11 @@ const Home = () => {
     refreshUser();
   };
  
+  const handleShowDetails = (media) => {
+    setSelectedMedia(media);
+    setIsDetailsModalOpen(true);
+  };
+
   const handleLogout = async () => {
     await logout();
     refreshUser();
@@ -98,6 +89,13 @@ const Home = () => {
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
         onAuthSuccess={handleAuthSuccess}
+      />
+
+      <MovieDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        mediaId={selectedMedia?.id}
+        mediaType={mediaType}
       />
 
       <div className="wrapper">
@@ -167,7 +165,7 @@ const Home = () => {
             </div>
             <ul>
               {trendingMovies.map((movie, index) => (
-                <li key={movie.id} onClick={() => handleCreateParty({ ...movie, movie_id: movie.id, media_type: mediaType })} className="cursor-pointer group relative overflow-hidden rounded-xl">
+                <li key={movie.id} onClick={() => handleShowDetails(movie)} className="cursor-pointer group relative overflow-hidden rounded-xl">
                   <p>{index + 1}</p>
                   <img src={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '/no-poster.png'} alt={movie.title || movie.name} className="transition-transform duration-500 group-hover:scale-110" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -200,7 +198,11 @@ const Home = () => {
           ) : (
             <ul>
               {mediaList.map((item) => (
-                <MovieCard key={item.id} movie={{ ...item, media_type: mediaType }} />
+                <MovieCard 
+                  key={item.id} 
+                  movie={{ ...item, media_type: mediaType }} 
+                  onDetailsClick={handleShowDetails}
+                />
               ))}
             </ul>
           )}
