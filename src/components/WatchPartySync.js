@@ -175,6 +175,9 @@ export default class WatchPartySync {
     if (muted    !== undefined) this.muted    = muted;
     if (volume   !== undefined) this.volume   = volume;
 
+    // Ignore events that we triggered ourselves (cooldown / sync window)
+    if (this.isSyncing) return;
+
     switch (event) {
       case 'play':
         if (this.isHost) {
