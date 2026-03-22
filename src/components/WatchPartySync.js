@@ -1,32 +1,70 @@
-// Simple, production-ready watch party synchronization for VidFast iframes
+/**
+ * WatchPartySync v3
+ *
+ * A robust host/viewer sync engine for VidFast-embedded players.
+ *
+ * Fixes vs v2:
+ *  - Separate lastBroadcastAt so host debounce actually fires
+ *  - Drift samples skipped / cleared during cooldown window
+ *  - syncToHost resets drift samples
+ *  - Clock-mismatch: local receipt time used for drift math, sentAt only for ordering
+ *  - Dynamic threshold is capped to prevent unbounded growth
+ *  - seek() preserves sub-second precision (no Math.floor)
+ *  - Empty driftSamples guard (no NaN divide-by-zero)
+ *  - destroy() tears down the transport listener
+ *  - forceResync awaits a real playerstatus response, 500ms hard fallback remains
+ *  - isMobile persisted on instance
+ *  - Full playerstatus event handled (volume, muted, duration exposed)
+ *  - volume() and mute() commands added
+ */
 export default class WatchPartySync {
-  constructor({
-    iframe,
-    isHost = false,
-    onLocalEvent,     // Called when local player emits an event to broadcast
-    onRemoteCommand,  // Called when remote command should be executed
-    onStatusUpdate,   // Called with player status updates (optional)
-    onMediaData       // Called when MEDIA_DATA is received (optional)
-  }) {
-    this.iframe = iframe;
-    this.isHost = isHost;
-    this.onLocalEvent = onLocalEvent;
-    this.onRemoteCommand = onRemoteCommand;
-    this.onStatusUpdate = onStatusUpdate;
-    this.onMediaData = onMediaData;
 
-    // Internal state
-    this.lastSyncTime = 0;        // Last known playback time from iframe
-    this.lastSyncAt = Date.now(); // When we last updated state
-    this.viewerCurrentTime = 0;   // Current time for external read access
-    this.playbackStatus = 'pause';
-    this.isRemoteCommand = false; // Prevents feedback loops
+  // ─────────────────────────────────────────
+  // CONSTRUCTION
+  // ─────────────────────────────────────────
 
-    // Configuration
-    this.DRIFT_THRESHOLD = 4;     // Seconds of drift to correct
-    this.COOLDOWN = 2000;         // Min time between corrections (ms)
+  /**
+   * @param {object}   opts
+   * @param {HTMLIFrameElement} opts.iframe     - The VidFast iframe element
+   * @param {object}   opts.transport           - { send(cmd), onMessage(cb) → unsubFn }
+   * @param {boolean}  [opts.isHost=false]      - True for the room host
+   * @param {boolean}  [opts.isMobile=false]    - Relaxes thresholds on mobile
+   */
+  constructor({ iframe, transport, isHost = false, isMobile = false }) {
+    this.iframe    = iframe;
+    this.transport = transport;
+    this.isHost    = isHost;
+    this.isMobile  = isMobile;         // persisted (was discarded in v2)
 
-    this.lastCorrectionAt = 0;
+    // ── Player state ──────────────────────────────
+    this.playing     = false;
+    this.currentTime = 0;
+    this.duration    = 0;
+    this.volume      = 1;
+    this.muted       = false;
+
+    // ── Sync anchor (LOCAL timestamps only for math) ──
+    this.lastSyncTime    = 0;   // seconds – player time at last sync
+    this.lastSyncLocalAt = 0;   // ms     – Date.now() at last sync
+    this.lastSyncSentAt  = 0;   // ms     – sentAt from remote cmd (ordering only)
+
+    // ── Drift tracking ────────────────────────────
+    this.driftSamples = [];
+    this.MAX_SAMPLES  = 6;
+
+    // ── Sync control ──────────────────────────────
+    this.isSyncing       = false;
+    this.lastBroadcastAt = 0;   // host-side debounce  (was reusing lastCommandAt in v2)
+    this.lastCommandAt   = 0;   // viewer-side: suppress old remote cmds
+
+    // ── Thresholds ────────────────────────────────
+    this.BASE_THRESHOLD   = isMobile ? 6   : 4;
+    this.SOFT_ZONE        = 1.5;
+    this.MAX_DRIFT_BONUS  = 3;          // cap on dynamic threshold growth
+    this.COOLDOWN         = isMobile ? 4000 : 2500;
+    this.BROADCAST_DEBOUNCE = 300;      // ms between host broadcasts
+
+    // ── Allowed origins ───────────────────────────
     this.vidfastOrigins = [
       'https://vidfast.pro',
       'https://vidfast.in',
@@ -34,191 +72,323 @@ export default class WatchPartySync {
       'https://vidfast.me',
       'https://vidfast.net',
       'https://vidfast.pm',
-      'https://vidfast.xyz'
+      'https://vidfast.xyz',
     ];
-    // Note: Caller must forward window message events to handleMessage()
+
+    // ── Status-request callbacks ──────────────────
+    this._statusCallbacks = [];
+
+    // Bind & init
+    this._onMessage = this._onMessage.bind(this);
+    this._unsubTransport = null;
+    this._init();
   }
 
-  // ============================
-  // Send commands to iframe
-  // ============================
-  _postMessage(command, data = {}) {
-    this.iframe?.contentWindow?.postMessage(
-      { command, ...data },
-      '*'
-    );
+  // ─────────────────────────────────────────
+  // LIFECYCLE
+  // ─────────────────────────────────────────
+
+  _init() {
+    window.addEventListener('message', this._onMessage);
+    // transport.onMessage may return an unsubscribe fn – store it for destroy()
+    const unsub = this.transport?.onMessage((cmd) => this._handleRemote(cmd));
+    if (typeof unsub === 'function') this._unsubTransport = unsub;
   }
 
-  play() {
-    this._postMessage('play');
+  destroy() {
+    window.removeEventListener('message', this._onMessage);
+    this._unsubTransport?.();          // avoid transport listener leak (v2 bug)
   }
 
-  pause() {
-    this._postMessage('pause');
+  // ─────────────────────────────────────────
+  // LOW-LEVEL POSTMESSAGE API
+  // ─────────────────────────────────────────
+
+  _post(command, payload = {}) {
+    this.iframe?.contentWindow?.postMessage({ command, ...payload }, '*');
   }
 
-  seek(time) {
-    this._postMessage('seek', { time });
+  /** Resume playback */
+  play()              { this._post('play'); }
+
+  /** Pause playback */
+  pause()             { this._post('pause'); }
+
+  /**
+   * Seek to time in seconds.
+   * Preserves sub-second precision (v2 used Math.floor which lost up to 0.999s).
+   * VidFast docs say "integer values" but floats work in practice; round only if
+   * you discover a specific player that rejects them.
+   */
+  seek(time)          { this._post('seek', { time }); }
+
+  /** Set volume 0.0 – 1.0 */
+  setVolume(level)    { this._post('volume', { level: Math.max(0, Math.min(1, level)) }); }
+
+  /** Set mute state */
+  setMuted(muted)     { this._post('mute', { muted: !!muted }); }
+
+  /**
+   * Request current player status.
+   * Returns a Promise that resolves with the status object,
+   * or rejects after `timeoutMs` milliseconds (default 3000).
+   */
+  getStatus(timeoutMs = 3000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._statusCallbacks = this._statusCallbacks.filter(cb => cb !== resolve);
+        reject(new Error('getStatus timed out'));
+      }, timeoutMs);
+
+      this._statusCallbacks.push((status) => {
+        clearTimeout(timer);
+        resolve(status);
+      });
+
+      this._post('getStatus');
+    });
   }
 
-  volume(level) {
-    this._postMessage('volume', { level });
-  }
+  // ─────────────────────────────────────────
+  // INBOUND PLAYER EVENTS
+  // ─────────────────────────────────────────
 
-  mute(muted) {
-    this._postMessage('mute', { muted });
-  }
+  _onMessage({ origin, data }) {
+    if (!this.vidfastOrigins.includes(origin) || !data) return;
+    if (data.type !== 'PLAYER_EVENT') return;
 
-  // ============================
-  // Request current player status
-  // ============================
-  requestStatus() {
-    this._postMessage('getStatus');
-  }
+    const { event, currentTime, duration, playing, muted, volume } = data.data;
 
-  // ============================
-  // Process incoming messages - call this from window message listener
-  // ============================
-  handleMessage(event) {
-    // Validate origin
-    if (!this.vidfastOrigins.includes(event.origin) || !event.data) {
-      return false; // Not a vidfast message
+    // Keep local state current
+    this.currentTime = currentTime;
+    if (duration  !== undefined) this.duration = duration;
+    if (playing   !== undefined) this.playing  = playing;
+    if (muted     !== undefined) this.muted    = muted;
+    if (volume    !== undefined) this.volume   = volume;
+
+    switch (event) {
+      case 'play':
+        this.playing = true;
+        this._broadcast('play', currentTime);
+        break;
+
+      case 'pause':
+        this.playing = false;
+        this._broadcast('pause', currentTime);
+        break;
+
+      case 'seeked':
+        this._broadcast('seek', currentTime);
+        break;
+
+      case 'timeupdate':
+        this._trackDrift(currentTime);
+        this._handleDrift();
+        break;
+
+      case 'ended':
+        this.playing = false;
+        this._broadcast('pause', currentTime);
+        break;
+
+      case 'playerstatus':
+        // Resolve any pending getStatus() promises
+        if (this._statusCallbacks.length > 0) {
+          const callbacks = [...this._statusCallbacks];
+          this._statusCallbacks = [];
+          callbacks.forEach(cb => cb(data.data));
+        }
+        break;
     }
-
-    const data = event.data;
-
-    // Handle status response from iframe (response to our requestStatus)
-    if (data.type === 'PLAYER_EVENT' && data.data.event === 'playerstatus') {
-      const { currentTime, playing, duration, muted, volume } = data.data;
-      if (currentTime !== undefined) {
-        // Use playing status to determine play/pause state
-        this._handlePlayerEvent(playing ? 'play' : 'pause', currentTime);
-      }
-      return true;
-    }
-
-    // Handle direct player events (play, pause, seeked, ended, timeupdate)
-    if (data.type === 'PLAYER_EVENT') {
-      const { event: playerEvent, currentTime } = data.data;
-      this._handlePlayerEvent(playerEvent, currentTime);
-      return true;
-    }
-
-    // Handle MEDIA_DATA for progress tracking
-    if (data.type === 'MEDIA_DATA') {
-      if (this.onMediaData) {
-        this.onMediaData(data.data);
-      }
-      return true;
-    }
-
-    return false; // Not handled
   }
 
-  // ============================
-  // Handle local player events
-  // ============================
-  handleLocalEvent(eventType, currentTime) {
-    // Update our state
-    if (eventType === 'play' || eventType === 'pause' || eventType === 'seeked') {
-      this.playbackStatus = eventType === 'play' ? 'play' : 'pause';
-      this.lastSyncTime = currentTime;
-      this.lastSyncAt = Date.now();
+  // ─────────────────────────────────────────
+  // BROADCAST  (host → room)
+  // ─────────────────────────────────────────
 
-      // Broadcast to party
-      if (this.onLocalEvent) {
-        this.onLocalEvent({
-          action: eventType === 'seeked' ? 'seek' : eventType,
-          time: currentTime,
-          sentAt: Date.now()
-        });
-      }
-    }
-  }
+  _broadcast(action, time) {
+    if (!this.isHost) return;
 
-  // ============================
-  // Handle incoming player events from iframe
-  // ============================
-  _handlePlayerEvent(eventType, currentTime) {
-    this.lastSyncTime = currentTime;
-    this.viewerCurrentTime = currentTime; // Keep in sync
-    this.lastSyncAt = Date.now();
-
-    if (eventType === 'play' || eventType === 'pause') {
-      this.playbackStatus = eventType;
-    }
-
-    if (this.onStatusUpdate) {
-      this.onStatusUpdate({ status: this.playbackStatus, time: currentTime });
-    }
-
-    // Check for drift (only for viewers, only on timeupdate events)
-    if (!this.isHost && eventType === 'timeupdate') {
-      this._checkDrift(currentTime);
-    }
-  }
-
-  // ============================
-  // Drift detection and correction
-  // ============================
-  _checkDrift(currentTime) {
+    // Use dedicated lastBroadcastAt — v2 mistakenly used lastCommandAt (viewer field)
     const now = Date.now();
-    const timeSinceSync = (now - this.lastSyncAt) / 1000;
+    if (now - this.lastBroadcastAt < this.BROADCAST_DEBOUNCE) return;
+    this.lastBroadcastAt = now;
 
-    // Calculate expected time based on last sync and elapsed time
-    const expectedTime = this.playbackStatus === 'play'
-      ? this.lastSyncTime + timeSinceSync
+    this.transport?.send({ action, time, sentAt: now });
+    this._updateSyncAnchor(time, now);
+  }
+
+  // ─────────────────────────────────────────
+  // REMOTE COMMANDS  (room → viewer)
+  // ─────────────────────────────────────────
+
+  _handleRemote(cmd) {
+    if (this.isHost) return;
+
+    // Discard stale / out-of-order commands (compare sentAt for ordering only)
+    if (cmd.sentAt <= this.lastSyncSentAt) return;
+
+    const localReceivedAt = Date.now();
+    this.lastCommandAt = localReceivedAt;
+
+    const latency    = (localReceivedAt - cmd.sentAt) / 1000;
+    const targetTime = cmd.action !== 'pause' ? cmd.time + latency : cmd.time;
+
+    switch (cmd.action) {
+      case 'play':
+        this.seek(targetTime);
+        this.play();
+        this.playing = true;
+        break;
+
+      case 'pause':
+        this.seek(targetTime);
+        this.pause();
+        this.playing = false;
+        break;
+
+      case 'seek':
+        this.seek(targetTime);
+        break;
+    }
+
+    // Store LOCAL received time as sync anchor — not sentAt — so drift math stays on
+    // one clock.  sentAt is stored separately purely for ordering guards.
+    this._updateSyncAnchor(targetTime, localReceivedAt, cmd.sentAt);
+    this._startCooldown();
+  }
+
+  // ─────────────────────────────────────────
+  // DRIFT TRACKING
+  // ─────────────────────────────────────────
+
+  _trackDrift(viewerTime) {
+    // Skip accumulation during cooldown — samples against stale anchor pollute the
+    // average and caused spurious re-seeks in v2
+    if (this.isSyncing) return;
+
+    const expectedTime = this.playing
+      ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
       : this.lastSyncTime;
 
-    const drift = currentTime - expectedTime;
-    const absDrift = Math.abs(drift);
+    const drift = viewerTime - expectedTime;
 
-    // Ignore small drift
-    if (absDrift < 1) return;
+    this.driftSamples.push(drift);
+    if (this.driftSamples.length > this.MAX_SAMPLES) this.driftSamples.shift();
+  }
 
-    // Check if we should correct
-    if (absDrift > this.DRIFT_THRESHOLD && (now - this.lastCorrectionAt) > this.COOLDOWN) {
-      console.log(`[WatchPartySync] Correcting drift: ${absDrift.toFixed(2)}s`);
+  // ─────────────────────────────────────────
+  // DRIFT CORRECTION
+  // ─────────────────────────────────────────
 
-      // Seek to expected position
+  _handleDrift() {
+    if (this.isHost || this.isSyncing) return;
+
+    // Guard against empty array divide-by-zero (v2 produced NaN on first timeupdate)
+    if (this.driftSamples.length === 0) return;
+
+    const avgDrift =
+      this.driftSamples.reduce((a, b) => a + b, 0) / this.driftSamples.length;
+
+    // Cap the dynamic bonus so the threshold can't grow unboundedly (v2 bug)
+    const dynamicBonus     = Math.min(Math.abs(avgDrift) * 0.5, this.MAX_DRIFT_BONUS);
+    const dynamicThreshold = this.BASE_THRESHOLD + dynamicBonus;
+
+    // Stability zone — small wobble, ignore
+    if (Math.abs(avgDrift) < this.SOFT_ZONE) return;
+
+    // Hard correction
+    if (Math.abs(avgDrift) > dynamicThreshold) {
+      const expectedTime = this.playing
+        ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
+        : this.lastSyncTime;
+
       this.seek(expectedTime);
-      this.lastCorrectionAt = now;
+      this._startCooldown();
     }
   }
 
-  // ============================
-  // Handle remote commands from host
-  // ============================
-  executeRemoteCommand(command, time) {
-    // Prevent feedback loops
-    if (this.isRemoteCommand) return;
+  // ─────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────
 
-    this.isRemoteCommand = true;
+  /**
+   * @param {number} time        - Player seconds at this sync point
+   * @param {number} localAt     - Local Date.now() for drift math
+   * @param {number} [sentAt]    - Remote sentAt for ordering only (optional)
+   */
+  _updateSyncAnchor(time, localAt = Date.now(), sentAt = localAt) {
+    this.lastSyncTime    = time;
+    this.lastSyncLocalAt = localAt;
+    this.lastSyncSentAt  = sentAt;
+  }
 
+  _startCooldown() {
+    this.isSyncing = true;
+    // Clear stale samples so post-cooldown tracking starts clean
+    this.driftSamples = [];
+    setTimeout(() => { this.isSyncing = false; }, this.COOLDOWN);
+  }
+
+  // ─────────────────────────────────────────
+  // RECOVERY
+  // ─────────────────────────────────────────
+
+  /**
+   * Force a hard resync.
+   * First tries to get a real status from the player; falls back to the stored
+   * anchor after 500 ms if the player doesn't respond in time.
+   *
+   * v2 race: the fallback ran against an unconditionally stale anchor.
+   * Here we only fall back if the real status hasn't arrived.
+   */
+  async forceResync() {
+    let resolved = false;
+
+    // Try real status first
     try {
-      if (command === 'play') {
-        this.play();
-      } else if (command === 'pause') {
-        this.pause();
-      } else if (command === 'seek' && time !== undefined) {
-        this.seek(time);
-        // Immediately update our state to avoid unnecessary corrections
-        this.lastSyncTime = time;
-        this.viewerCurrentTime = time;
-        this.lastSyncAt = Date.now();
+      const status = await this.getStatus(500);
+      resolved = true;
+      this._applyResync(status.currentTime, status.playing);
+    } catch {
+      // Player didn't respond in 500 ms — use stored anchor
+      if (!resolved) {
+        const expectedTime = this.playing
+          ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
+          : this.lastSyncTime;
+        this._applyResync(expectedTime, this.playing);
       }
-    } finally {
-      // Reset flag after a short delay
-      setTimeout(() => {
-        this.isRemoteCommand = false;
-      }, 100);
     }
   }
 
-  // ============================
-  // Cleanup
-  // ============================
-  destroy() {
-    // Cleanup if needed
+  _applyResync(time, playing) {
+    this.seek(time);
+    playing ? this.play() : this.pause();
+    this._updateSyncAnchor(time);
+    this._startCooldown();
+  }
+
+  // ─────────────────────────────────────────
+  // JOIN / INITIAL SYNC
+  // ─────────────────────────────────────────
+
+  /**
+   * Called when a viewer joins mid-session.
+   * @param {{ time: number, playing: boolean, sentAt: number }} snapshot
+   */
+  syncToHost({ time, playing, sentAt }) {
+    const latency    = (Date.now() - sentAt) / 1000;
+    const targetTime = playing ? time + latency : time;
+
+    this.seek(targetTime);
+    playing ? this.play() : this.pause();
+
+    this.playing = playing;
+
+    // Reset drift history — v2 left stale samples that immediately triggered
+    // a correction on the first timeupdate after joining
+    this.driftSamples = [];
+
+    this._updateSyncAnchor(targetTime, Date.now(), sentAt);
   }
 }

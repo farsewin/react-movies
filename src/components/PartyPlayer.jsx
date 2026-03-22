@@ -24,6 +24,7 @@ const PartyPlayer = forwardRef(({
   const containerRef = useRef(null);
   const watchPartyRef = useRef(null);
   const roomStateRef = useRef(roomState);
+  const hasInitialSynced = useRef(false);
 
   // UI State
   const [fsState, setFsState] = useState(0);
@@ -201,6 +202,21 @@ const PartyPlayer = forwardRef(({
       }
     });
 
+    // Initial sync for viewers if roomState already available
+    if (!isHost && roomStateRef.current) {
+      try {
+        const room = roomStateRef.current;
+        watchPartyRef.current.syncToHost({
+          time: room.last_sync_time || 0,
+          playing: room.playback_status === 'play',
+          sentAt: room.last_sync_at ? new Date(room.last_sync_at).getTime() : Date.now()
+        });
+        hasInitialSynced.current = true;
+      } catch (e) {
+        console.error('Initial syncToHost failed:', e);
+      }
+    }
+
     // Set up message forwarding to WatchPartySync
     const handleMessage = (event) => {
       watchPartyRef.current?.handleMessage(event);
@@ -219,9 +235,30 @@ const PartyPlayer = forwardRef(({
     return () => {
       window.removeEventListener('message', handleMessage);
       if (pollInterval) clearInterval(pollInterval);
-      watchPartyRef.current = null;
+      // Cleanup WatchPartySync properly
+      if (watchPartyRef.current) {
+        watchPartyRef.current.destroy();
+        watchPartyRef.current = null;
+      }
+      hasInitialSynced.current = false;
     };
   }, [isHost, shouldLoadIframe, roomDocId, uiEpisode, onNativeNavigation]);
+
+  // Handle initial sync when roomState arrives after WatchPartySync creation
+  useEffect(() => {
+    if (!isHost && watchPartyRef.current && roomState && !hasInitialSynced.current) {
+      try {
+        watchPartyRef.current.syncToHost({
+          time: roomState.last_sync_time || 0,
+          playing: roomState.playback_status === 'play',
+          sentAt: roomState.last_sync_at ? new Date(roomState.last_sync_at).getTime() : Date.now()
+        });
+        hasInitialSynced.current = true;
+      } catch (e) {
+        console.error('Initial syncToHost failed:', e);
+      }
+    }
+  }, [roomState, isHost]);
 
   // ============================
   // Host: handle local events from iframe and broadcast
@@ -457,6 +494,16 @@ const PartyPlayer = forwardRef(({
               <div className="px-3 py-1 bg-indigo-600/90 backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 border border-indigo-400/20 shadow-lg">
                 <span className={`size-1.5 bg-white rounded-full ${isSyncing ? 'animate-ping' : 'animate-pulse'}`} />
                 {isSyncing ? 'Syncing...' : 'Synced with Host'}
+                <button
+                  onClick={() => watchPartyRef.current?.forceResync()}
+                  className="ml-1 hover:bg-white/10 rounded p-0.5 transition-colors pointer-events-auto"
+                  title="Resync"
+                  type="button"
+                >
+                  <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
               </div>
             )}
           </div>
