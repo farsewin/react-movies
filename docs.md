@@ -1,338 +1,316 @@
-VidFast Embed API — Complete Developer Documentation
+Use one of the following domains for embed URLs:
+vidfast.pro, vidfast.in, vidfast.io, vidfast.me, vidfast.net, vidfast.pm, vidfast.xyz
+Documentation
+Complete reference guide for embedding and customizing VidFast players on your website.
 
-VidFast provides embeddable video players for movies and TV shows that can be integrated into any website using an iframe. The player supports customization, events, progress tracking, and programmatic control via the PostMessage API.
-
-Supported Embed Domains
-
-You can use any of the following domains when generating embed URLs:
-
-vidfast.pro
-
-vidfast.in
-
-vidfast.io
-
-vidfast.me
-
-vidfast.net
-
-vidfast.pm
-
-vidfast.xyz
-
-If one domain becomes unavailable, simply switch to another.
 
 Endpoints
-Movie Embed
-Endpoint
-https://vidfast.pro/movie/{id}
-Required Parameter
-Parameter	Description
-id	Movie identifier from IMDb or TMDB
-Example
-https://vidfast.pro/movie/tt6263850
-TV Show Embed
-Endpoint
-https://vidfast.pro/tv/{id}/{season}/{episode}
-Required Parameters
-Parameter	Description
-id	TV show identifier from IMDb or TMDB
-season	Season number
-episode	Episode number
-Example
-https://vidfast.pro/tv/tt4052886/1/5
-Player Parameters
 
-Optional parameters allow customization of the player.
+Implementation
 
-Parameter	Description
-title	Show or hide media title
-poster	Show or hide poster image
-autoPlay	Start playback automatically
-startAt	Start playback at a specific time (seconds)
-theme	Player color theme (hex code without #)
-server	Default streaming server
-hideServer	Hide server selector button
-fullscreenButton	Show or hide fullscreen button
-chromecast	Show or hide Chromecast button
-sub	Default subtitle language
+Customization
 
-TV-specific parameters:
+Events
 
-Parameter	Description
-nextButton	Show "Next Episode" button when 90% watched
-autoNext	Automatically play next episode
-Basic Implementation
-
-The simplest way to embed the player is using an iframe.
-
-<iframe 
-  src="https://vidfast.pro/movie/533535" 
-  width="100%" 
-  height="100%" 
-  frameborder="0" 
-  allowfullscreen 
-  allow="encrypted-media"
-></iframe>
-Attribute Explanation
-Attribute	Purpose
-src	Player URL
-width	Player width
-height	Player height
-frameborder	Removes iframe border
-allowfullscreen	Enables fullscreen
-allow="encrypted-media"	Allows DRM media playback
-Responsive Implementation
-
-To maintain a 16:9 aspect ratio, wrap the iframe in a container.
-
-<div style="position: relative; padding-bottom: 56.25%; height: 0;">
-  <iframe
-    src="https://vidfast.pro/movie/533535"
-    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
-    frameborder="0"
-    allowfullscreen
-    allow="encrypted-media"
-  ></iframe>
-</div>
-
-The 56.25% padding ensures the container maintains a 16:9 video ratio.
-
-Responsive Implementation (React + Tailwind)
-
-For React applications using Tailwind CSS:
-
-function MoviePlayer({ id }) {
-  return (
-    <div className="relative w-full pt-[56.25%]">
-      <iframe
-        src={`https://vidfast.pro/movie/${id}`}
-        className="absolute top-0 left-0 w-full h-full"
-        frameBorder="0"
-        allowFullScreen
-        allow="encrypted-media"
-      />
-    </div>
-  );
-}
-
-Usage:
-
-<MoviePlayer id="533535" />
-Color Themes
-
-Customize the player UI color using the theme parameter.
-
-Syntax
-?theme=HEXCOLOR
-Examples
-
-Green theme
-
-<iframe src="https://vidfast.pro/movie/533535?theme=16A085"></iframe>
-
-Blue theme
-
-<iframe src="https://vidfast.pro/movie/533535?theme=2980B9"></iframe>
-
-Purple theme
-
-<iframe src="https://vidfast.pro/movie/533535?theme=9B59B6"></iframe>
-
-You can use any hex color.
-
-Example:
-
-https://vidfast.pro/movie/533535?theme=E50914
-Advanced Feature Example
-
-Multiple parameters can be combined.
-
-<iframe
-  src="https://vidfast.pro/tv/tt4052886/1/5?autoPlay=true&title=true&poster=true&theme=16A085&nextButton=true&autoNext=true"
-  width="100%"
-  height="100%"
-  frameborder="0"
-  allowfullscreen
-  allow="encrypted-media"
-></iframe>
-Feature Compatibility
-Feature	Movies	TV Shows
-Color Themes	✓	✓
-AutoPlay	✓	✓
-Start Time	✓	✓
-Poster Display	✓	✓
-Next Episode	✗	✓
-Auto Next	✗	✓
+PostMessage
 Events & Progress Tracking
-
-The player sends playback events to the parent page using the PostMessage API.
-
-These events allow developers to track user progress and create features like Continue Watching.
+The player can send watch progress events to the parent window. You can save this progress to localStorage or your own backend.
 
 Available Events
-Event	Description
-play	Video started
-pause	Video paused
-seeked	User jumped to another timestamp
-ended	Playback finished
-timeupdate	Sent periodically during playback
-playerstatus	Returned when requesting player status
+playTriggered when video starts playing
+pauseTriggered when video is paused
+seekedTriggered when user seeks to a different timestamp
+endedTriggered when video playback ends
+timeupdateTriggered periodically during playback
+playerstatusTriggered when getStatus is called
 Event Data Structure
-
-Example event message:
-
 {
-  "type": "PLAYER_EVENT",
-  "data": {
-    "event": "play",
-    "currentTime": 120,
-    "duration": 5400,
-    "tmdbId": 533535,
-    "mediaType": "movie",
-    "playing": true,
-    "muted": false,
-    "volume": 1
-  }
+    type: "PLAYER_EVENT",
+    data: {
+        event: "play" | "pause" | "seeked" | "ended" | "timeupdate" | "playerstatus",
+        currentTime: number,
+        duration: number,
+        tmdbId: number,
+        mediaType: "movie" | "tv",
+        season?: number,
+        episode?: number,
+        playing: bool,
+        muted: bool,
+        volume: number
+    }
 }
-Event Listener Example
+
+Event Listener Implementation
+Add this script where your iframe is located. For React/Next.js, place it in a useEffect hook.
+
 const vidfastOrigins = [
-  "https://vidfast.pro",
-  "https://vidfast.in",
-  "https://vidfast.io",
-  "https://vidfast.me",
-  "https://vidfast.net",
-  "https://vidfast.pm",
-  "https://vidfast.xyz"
+    'https://vidfast.pro',
+    'https://vidfast.in',
+    'https://vidfast.io',
+    'https://vidfast.me',
+    'https://vidfast.net',
+    'https://vidfast.pm',
+    'https://vidfast.xyz'
 ];
 
-window.addEventListener("message", ({ origin, data }) => {
-  if (!vidfastOrigins.includes(origin) || !data) return;
+window.addEventListener('message', ({ origin, data }) => {
+    if (!vidfastOrigins.includes(origin) || !data) {
+        return;
+    }
 
-  if (data.type === "PLAYER_EVENT") {
-    const { event, currentTime, duration } = data.data;
+    if (data.type === 'PLAYER_EVENT') {
+        const { event, currentTime, duration } = data.data;
 
-    console.log(`Player ${event} at ${currentTime}s of ${duration}s`);
-  }
+        console.log(`Player ${event} at ${currentTime}s of ${duration}s`);
+
+        // Add custom event handling logic here
+    }
 });
-Progress Tracking Example
 
-VidFast can send full media progress data.
+Direct Media Data Event Listener
+This simpler event listener directly captures and stores the complete media data structure:
 
-window.addEventListener("message", ({ origin, data }) => {
-  if (!vidfastOrigins.includes(origin) || !data) return;
+const vidfastOrigins = [
+    'https://vidfast.pro',
+    'https://vidfast.in',
+    'https://vidfast.io',
+    'https://vidfast.me',
+    'https://vidfast.net',
+    'https://vidfast.pm',
+    'https://vidfast.xyz'
+];
 
-  if (data.type === "MEDIA_DATA") {
-    localStorage.setItem("vidFastProgress", JSON.stringify(data.data));
-  }
+window.addEventListener('message', ({ origin, data }) => {
+    if (!vidfastOrigins.includes(origin) || !data) {
+        return;
+    }
+
+    if (data.type === 'MEDIA_DATA') {
+        localStorage.setItem('vidFastProgress', JSON.stringify(data.data));
+    }
 });
-Stored Progress Structure Example
 
-Example saved data:
+Stored Data Structure Example
+The data is stored in localStorage and contains movie/show details, watch progress, and episode-specific progress for TV shows.
 
 {
-  "m533535": {
-    "id": 533535,
-    "type": "movie",
-    "title": "Deadpool & Wolverine",
-    "progress": {
-      "watched": 353.53,
-      "duration": 7667.22
+    "t63174": {
+        "id": 63174,
+        "type": "tv",
+        "title": "Lucifer",
+        "poster_path": "/ekZobS8isE6mA53RAiGDG93hBxL.jpg",
+        "backdrop_path": "/wbiPjTWpZMIB8ffBq7HvzAph4Ft.jpg",
+        "progress": {
+            "watched": 793.207692,
+            "duration": 2695.3689
+        },
+        "last_season_watched": 1,
+        "last_episode_watched": 1,
+        "show_progress": {
+            "s1e1": {
+                "season": 1,
+                "episode": 1,
+                "progress": {
+                    "watched": 793.207692,
+                    "duration": 2695.3689
+                },
+                "last_updated": 1742578021768
+            }
+        },
+        "last_updated": 1742578021768
+    },
+    "m533535": {
+        "id": 533535,
+        "type": "movie",
+        "title": "Deadpool & Wolverine",
+        "poster_path": "/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg",
+        "backdrop_path": "/by8z9Fe8y7p4jo2YlW2SZDnptyT.jpg",
+        "progress": {
+            "watched": 353.530349,
+            "duration": 7667.227
+        },
+        "last_updated": 1742577064433
     }
-  }
 }
-PostMessage API — Player Control
 
-The player can also receive commands from the parent page.
+PostMessage API Control
+Control VidFast players programmatically using the PostMessage API. Perfect for watch party features and custom player integrations.
 
-General command format:
+Available Commands
+play
+Resume video playback
+iframe.contentWindow.postMessage({
+    command: 'play'
+}, '*');
+pause
+Pause video playback
+iframe.contentWindow.postMessage({
+    command: 'pause'
+}, '*');
+seek
+Jump to specific time in video (seconds)
+iframe.contentWindow.postMessage({
+    command: 'seek',
+    time: 120  // Jump to 2 minutes
+}, '*');
+volume
+Set player volume (0.0 to 1.0)
+iframe.contentWindow.postMessage({
+    command: 'volume',
+    level: 0.5  // Set to 50% volume
+}, '*');
+mute
+Toggle mute state
+iframe.contentWindow.postMessage({
+    command: 'mute',
+    muted: true  // true to mute, false to unmute
+}, '*');
+getStatus
+Get current player status
+iframe.contentWindow.postMessage({
+    command: 'getStatus'
+}, '*');
 
-iframe.contentWindow.postMessage({
-  command: "COMMAND_NAME"
-}, "*");
-Play
-iframe.contentWindow.postMessage({
-  command: "play"
-}, "*");
-Pause
-iframe.contentWindow.postMessage({
-  command: "pause"
-}, "*");
-Seek
-iframe.contentWindow.postMessage({
-  command: "seek",
-  time: 120
-}, "*");
-Volume
-iframe.contentWindow.postMessage({
-  command: "volume",
-  level: 0.5
-}, "*");
-Mute
-iframe.contentWindow.postMessage({
-  command: "mute",
-  muted: true
-}, "*");
-Get Player Status
-iframe.contentWindow.postMessage({
-  command: "getStatus"
-}, "*");
-
-Example listener:
-
-window.addEventListener("message", ({ data }) => {
-  if (data.type === "PLAYER_EVENT" && data.data.event === "playerstatus") {
-    console.log(data.data);
-  }
+// Listen for response
+window.addEventListener('message', ({ data }) => {
+    if (data.type === 'PLAYER_EVENT' && data.data.event === 'playerstatus') {
+        console.log('Current time:', data.data.currentTime);
+        console.log('Duration:', data.data.duration);
+        console.log('Is playing:', data.data.playing);
+        console.log('Is muted:', data.data.muted);
+        console.log('Volume:', data.data.volume);
+    }
 });
 Watch Party Integration Example
+Perfect for synchronizing video playback across multiple users in a watch party scenario.
 
-The PostMessage API enables synchronized playback across multiple users.
+// Watch Party Controller Example
+class WatchPartyController {
+    vidfastOrigins = [
+        'https://vidfast.pro',
+        'https://vidfast.in',
+        'https://vidfast.io',
+        'https://vidfast.me',
+        'https://vidfast.net',
+        'https://vidfast.pm',
+        'https://vidfast.xyz'
+    ]
 
-Typical architecture:
+    constructor(iframeElement) {
+        this.iframe = iframeElement;
+        this.setupEventListeners();
+    }
 
-User action
-      ↓
-Frontend player command
-      ↓
-Server broadcast (WebSocket)
-      ↓
-Other clients receive command
-      ↓
-Players update playback state
+    // Sync play command to all participants
+    syncPlay(time) {
+        this.iframe.contentWindow.postMessage({
+            command: 'play',
+            time: time
+        }, '*');
 
-Example controller structure:
+        // Broadcast to other participants
+        this.broadcastToParty({
+            action: 'play',
+            time: time
+        });
+    }
 
-WatchPartyController
-   ├── syncPlay()
-   ├── syncPause()
-   ├── syncSeek()
-   └── broadcastToParty()
+    // Sync pause command to all participants
+    syncPause(time) {
+        this.iframe.contentWindow.postMessage({
+            command: 'pause',
+            time: time
+        }, '*');
 
-This allows real-time synchronization across multiple viewers.
+        this.broadcastToParty({
+            action: 'pause',
+            time: time
+        });
+    }
 
-Important Notes
+    // Sync seek to specific time for all participants
+    syncSeek(time) {
+        this.iframe.contentWindow.postMessage({
+            command: 'seek',
+            time: time
+        }, '*');
 
+        this.broadcastToParty({
+            action: 'seek',
+            time: time
+        });
+    }
+
+    // Handle incoming party commands
+    handlePartyCommand(command) {
+        switch (command.action) {
+            case 'play':
+                this.iframe.contentWindow.postMessage({
+                    command: 'play'
+                }, '*');
+                break;
+            case 'pause':
+                this.iframe.contentWindow.postMessage({
+                    command: 'pause'
+                }, '*');
+                break;
+            case 'seek':
+                this.iframe.contentWindow.postMessage({
+                    command: 'seek',
+                    time: command.time
+                }, '*');
+                break;
+        }
+    }
+
+    broadcastToParty(command) {
+        // Your party synchronization logic here
+        // (WebSocket, Socket.IO, etc.)
+    }
+
+    onPlayerStatusUpdate(status) {
+        // Your status update logic here
+    }
+
+    setupEventListeners() {
+        // Listen for player events
+        window.addEventListener('message', (event) => {
+            if (!this.vidfastOrigins.includes(event.origin) || !event.data) {
+                return;
+            }
+
+            if (event.data.type === 'PLAYER_EVENT') {
+                const {
+                    event: playerEvent,
+                    currentTime
+                } = event.data.data;
+
+                switch (playerEvent) {
+                    case 'play':
+                        this.syncPlay(currentTime);
+                        break;
+                    case 'pause':
+                        this.syncPause(currentTime);
+                        break;
+                    case 'seeked':
+                        this.syncSeek(currentTime);
+                        break;
+                }
+            }
+
+            if (event.data.type === 'PLAYER_EVENT' && event.data.data.event === 'playerstatus') {
+                this.onPlayerStatusUpdate(event.data.data);
+            }
+        });
+    }
+}
+
+// Usage
+const iframe = document.querySelector('#vidfast-player');
+const watchParty = new WatchPartyController(iframe);
+⚠️ Important Notes
 • PostMessage commands work across all VidFast domains
-• Commands are processed asynchronously
-• Always verify message origins for security
-• Seek times are provided in seconds
-• Watch party implementations should handle network latency
-
-Recommended Integration Architecture
-
-Typical streaming website architecture:
-
-Frontend (React / Next.js)
-        │
-        │ iframe embed
-        ▼
-VidFast Player
-        │
-        │ postMessage events
-        ▼
-Frontend Event Handler
-        │
-        ├── Save progress (localStorage / backend)
-        ├── Analytics
-        └── Watch party synchronization
+• Commands are processed asynchronously - status responses may have a small delay
+• For watch parties, implement proper synchronization logic to handle network latency
+• Always handle message events to receive player status updates
+• Seek commands accept time in seconds (integer values)
