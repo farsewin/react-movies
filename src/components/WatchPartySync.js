@@ -322,6 +322,27 @@ export default class WatchPartySync {
     this.lastSyncSentAt  = sentAt;
   }
 
+  getDebugInfo() {
+    const now = Date.now();
+    const elapsedSinceSync = this.lastSyncLocalAt > 0 ? (now - this.lastSyncLocalAt) / 1000 : 0;
+    const avgDrift = this.driftSamples.length > 0
+      ? this.driftSamples.reduce((a, b) => a + b, 0) / this.driftSamples.length
+      : 0;
+
+    return {
+      isHost: this.isHost,
+      playing: this.playing,
+      currentTime: this.currentTime.toFixed(2),
+      expectedTime: (this.lastSyncTime + (this.playing ? elapsedSinceSync : 0)).toFixed(2),
+      driftSamples: this.driftSamples.map(d => d.toFixed(3)),
+      avgDrift: avgDrift.toFixed(3),
+      isSyncing: this.isSyncing,
+      lastSyncLocalAt: this.lastSyncLocalAt,
+      elapsedSinceSync: elapsedSinceSync.toFixed(1),
+      threshold: (this.BASE_THRESHOLD + Math.min(Math.abs(avgDrift) * 0.5, this.MAX_DRIFT_BONUS)).toFixed(2)
+    };
+  }
+
   _startCooldown() {
     this.isSyncing = true;
     // Clear stale samples so post-cooldown tracking starts clean
