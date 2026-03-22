@@ -171,7 +171,7 @@ export default class WatchPartySync {
 
     this.currentTime = currentTime;
     if (duration !== undefined) this.duration = duration;
-    if (playing  !== undefined) this.playing  = playing;
+    if (this.isHost && playing !== undefined) this.playing = playing;
     if (muted    !== undefined) this.muted    = muted;
     if (volume   !== undefined) this.volume   = volume;
 
