@@ -124,7 +124,6 @@ const Home = () => {
         </nav>
 
         <header>
-          <img src="/hero.png" alt="Hero Banner" />
           <h1>Find <span className="text-gradient">{mediaType === 'movie' ? 'Movies' : 'TV Shows'}</span> You'll Enjoy Without the Hassle</h1>
           
           <div className="flex justify-center gap-4 mb-8 relative z-50">
