@@ -358,15 +358,6 @@ const PartyPlayer = forwardRef(({
         )}
       </div>
 
-      {/* Viewer slave overlay */}
-      {!isHost && (
-        <div className="absolute inset-y-0 left-0 w-[70%] z-10 pointer-events-auto" onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setShowControls(prev => !prev);
-        }} />
-      )}
-
       {/* Gesture Layer */}
       <div className="absolute inset-x-0 top-0 h-[75%] z-20 pointer-events-none flex">
         <div
