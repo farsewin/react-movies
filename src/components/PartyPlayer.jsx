@@ -33,6 +33,8 @@ const PartyPlayer = forwardRef(({
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [seekFeedback, setSeekFeedback] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
   const controlsTimeoutRef = useRef(null);
   const lastCommandRef = useRef({ key: null, time: 0 });
 
@@ -75,7 +77,7 @@ const PartyPlayer = forwardRef(({
     toggleFullscreen: toggleFullscreenMode
   }));
 
-  // Mouse activity for UI visibility
+  // Mouse activity and Fullscreen visibility
   useEffect(() => {
     const handleActivity = () => {
       setShowControls(true);
@@ -101,6 +103,7 @@ const PartyPlayer = forwardRef(({
         document.body.classList.add('overflow-hidden');
       }
     };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
@@ -110,8 +113,30 @@ const PartyPlayer = forwardRef(({
       }
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.body.classList.remove('overflow-hidden');
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
   }, [isCinematic]);
+
+  // Toggle debug with Shift+D
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.shiftKey && e.key.toLowerCase() === 'd') {
+        setShowDebug(prev => !prev);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Poll debug info when UI is visible
+  useEffect(() => {
+    if (!showDebug || !watchPartyRef.current) return;
+    const interval = setInterval(() => {
+      setDebugInfo(watchPartyRef.current.getDebugInfo());
+    }, 500);
+    return () => clearInterval(interval);
+  }, [showDebug]);
 
   // Delay iframe load
   useEffect(() => {
@@ -450,6 +475,46 @@ const PartyPlayer = forwardRef(({
               showControls={showControls || (!isFullscreen && !isCinematic)}
             />
           )}
+
+          {/* Debug Overlay */}
+      {showDebug && debugInfo && (
+        <div className="absolute top-4 left-4 z-[9999] bg-black/80 backdrop-blur-md text-xs font-mono p-4 rounded-lg border border-white/20 shadow-2xl text-blue-400 pointer-events-none select-none min-w-[200px]">
+          <div className="font-bold border-b border-white/10 pb-1 mb-2 flex justify-between">
+            <span>SYNC DEBUG (v3)</span>
+            <span className={debugInfo.isSyncing ? "text-yellow-400" : "text-green-400"}>
+              {debugInfo.isSyncing ? "COOLDOWN" : "IDLE"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <span className="text-white/50">Role:</span>
+            <span className="text-white">{debugInfo.isHost ? "HOST" : "VIEWER"}</span>
+            
+            <span className="text-white/50">State:</span>
+            <span className="text-white">{debugInfo.playing ? "PLAYING" : "PAUSED"}</span>
+            
+            <span className="text-white/50">Local:</span>
+            <span className="text-white">{debugInfo.currentTime}s</span>
+            
+            <span className="text-white/50">Expect:</span>
+            <span className="text-white">{debugInfo.expectedTime}s</span>
+            
+            <span className="text-white/50">Anchor:</span>
+            <span className="text-white">-{debugInfo.elapsedSinceSync}s ago</span>
+            
+            <span className="text-white/50">Avg Drift:</span>
+            <span className={`font-bold ${Math.abs(debugInfo.avgDrift) > debugInfo.threshold ? "text-red-400" : "text-blue-300"}`}>
+              {debugInfo.avgDrift}s
+            </span>
+            
+            <span className="text-white/50">Limit:</span>
+            <span className="text-white">±{debugInfo.threshold}s</span>
+          </div>
+          
+          <div className="mt-3 text-[10px] opacity-70">
+            Samples: [{debugInfo.driftSamples.join(', ')}]
+          </div>
+        </div>
+      )}
 
           {/* Fullscreen Button */}
           <div className={`absolute bottom-20 right-6 z-[60] flex items-center gap-2 transition-all duration-500 pointer-events-auto ${showControls || (!isFullscreen && !isCinematic) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
