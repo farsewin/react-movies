@@ -5,13 +5,15 @@ export default class WatchPartySync {
     isHost = false,
     onLocalEvent,     // Called when local player emits an event to broadcast
     onRemoteCommand,  // Called when remote command should be executed
-    onStatusUpdate    // Called with player status updates (optional)
+    onStatusUpdate,   // Called with player status updates (optional)
+    onMediaData       // Called when MEDIA_DATA is received (optional)
   }) {
     this.iframe = iframe;
     this.isHost = isHost;
     this.onLocalEvent = onLocalEvent;
     this.onRemoteCommand = onRemoteCommand;
     this.onStatusUpdate = onStatusUpdate;
+    this.onMediaData = onMediaData;
 
     // Internal state
     this.lastSyncTime = 0;        // Last known playback time from iframe
@@ -48,15 +50,23 @@ export default class WatchPartySync {
   }
 
   play() {
-    this._postMessage('play', { source: 'remote' });
+    this._postMessage('play');
   }
 
   pause() {
-    this._postMessage('pause', { source: 'remote' });
+    this._postMessage('pause');
   }
 
   seek(time) {
-    this._postMessage('seek', { time, source: 'remote' });
+    this._postMessage('seek', { time });
+  }
+
+  volume(level) {
+    this._postMessage('volume', { level });
+  }
+
+  mute(muted) {
+    this._postMessage('mute', { muted });
   }
 
   // ============================
@@ -77,36 +87,28 @@ export default class WatchPartySync {
 
     const data = event.data;
 
-    // Handle status request from iframe (iframe asks parent for current status)
-    if (data.type === 'GET_STATUS_REQUEST') {
-      this.iframe.contentWindow.postMessage({
-        type: 'GET_STATUS_RESPONSE',
-        currentTime: this.lastSyncTime,
-        status: this.playbackStatus
-      }, '*');
-      return true;
-    }
-
-    // Handle status poll responses from iframe (response to our requestStatus)
-    if (data.type === 'GET_STATUS_RESPONSE') {
-      const { currentTime, status } = data.data;
+    // Handle status response from iframe (response to our requestStatus)
+    if (data.type === 'PLAYER_EVENT' && data.data.event === 'playerstatus') {
+      const { currentTime, playing, duration, muted, volume } = data.data;
       if (currentTime !== undefined) {
-        this._handlePlayerEvent(status, currentTime);
+        // Use playing status to determine play/pause state
+        this._handlePlayerEvent(playing ? 'play' : 'pause', currentTime);
       }
       return true;
     }
 
-    // Handle remote commands (for viewers)
-    if (data.type === 'REMOTE_COMMAND') {
-      const { command, time } = data.data;
-      this.executeRemoteCommand(command, time);
-      return true;
-    }
-
-    // Handle direct player events
+    // Handle direct player events (play, pause, seeked, ended, timeupdate)
     if (data.type === 'PLAYER_EVENT') {
       const { event: playerEvent, currentTime } = data.data;
       this._handlePlayerEvent(playerEvent, currentTime);
+      return true;
+    }
+
+    // Handle MEDIA_DATA for progress tracking
+    if (data.type === 'MEDIA_DATA') {
+      if (this.onMediaData) {
+        this.onMediaData(data.data);
+      }
       return true;
     }
 
@@ -150,7 +152,7 @@ export default class WatchPartySync {
       this.onStatusUpdate({ status: this.playbackStatus, time: currentTime });
     }
 
-    // Check for drift (only for viewers)
+    // Check for drift (only for viewers, only on timeupdate events)
     if (!this.isHost && eventType === 'timeupdate') {
       this._checkDrift(currentTime);
     }
