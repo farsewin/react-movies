@@ -4,6 +4,8 @@ import { updateWatchProgress, syncRoomState } from '../services/appwrite';
 import ChatOverlay from './ChatOverlay';
 import VoiceChatOverlay from './VoiceChatOverlay';
 import WatchPartySync from './WatchPartySync';
+import ArabicSubtitleEngine from './ArabicSubtitleEngine';
+import SubDLProvider from './SubDLProvider';
 
 const PartyPlayer = forwardRef(({
   movie,
@@ -25,6 +27,9 @@ const PartyPlayer = forwardRef(({
   const watchPartyRef = useRef(null);
   const roomStateRef = useRef(roomState);
   const hasInitialSynced = useRef(false);
+  const subtitleEngineRef = useRef(null);
+  const subtitleProviderRef = useRef(null);
+  const [subtitleStatus, setSubtitleStatus] = useState(null);
 
   // UI State
   const [fsState, setFsState] = useState(0);
@@ -210,7 +215,57 @@ const PartyPlayer = forwardRef(({
       }
       hasInitialSynced.current = false;
     };
-  }, [isHost, isMobile, shouldLoadIframe, roomDocId, isSyncing]);
+  }, [isHost, isMobile, shouldLoadIframe, roomDocId]);
+
+  // ============================
+  // Subtitle System Integration
+  // ============================
+  useEffect(() => {
+    if (!containerRef.current || !shouldLoadIframe) return;
+
+    // 1. Initialize Engine
+    const engine = new ArabicSubtitleEngine({ 
+      container: containerRef.current 
+    });
+    subtitleEngineRef.current = engine;
+
+    // 2. Initialize Provider
+    // Note: In production, moving this to a config or .env is better.
+    const BACKEND_URL = "https://watch-together-production-7fd9.up.railway.app";
+    
+    const provider = new SubDLProvider({
+      apiKey: 'FZxPCYLoYH8hfordb7tsoeXDqXK74ZQ0', // Using the one found in backend as placeholder
+      proxyBase: BACKEND_URL,
+      engine: engine,
+      onStatus: (msg) => setSubtitleStatus(msg),
+      onError: (err) => {
+        console.error("Subtitle Error:", err);
+        setSubtitleStatus("فشل تحميل الترجمة");
+        setTimeout(() => setSubtitleStatus(null), 3000);
+      }
+    });
+    subtitleProviderRef.current = provider;
+
+    return () => {
+      subtitleEngineRef.current = null;
+      subtitleProviderRef.current = null;
+    };
+  }, [shouldLoadIframe]);
+
+  // Trigger subtitle search when movie/episode changes
+  useEffect(() => {
+    if (!subtitleProviderRef.current || !tmdbId) return;
+
+    const searchParams = {
+      tmdb_id: tmdbId,
+      type: isTV ? 'tv' : 'movie',
+      season: isTV ? season : null,
+      episode: isTV ? uiEpisode : null
+    };
+
+    console.log("[SubDL] Triggering search for:", searchParams);
+    subtitleProviderRef.current.search(searchParams);
+  }, [tmdbId, isTV, season, uiEpisode]);
 
   // Handle roomState updates from Appwrite and forward to WatchPartySync transport
   useEffect(() => {
@@ -259,6 +314,11 @@ const PartyPlayer = forwardRef(({
         
         // Let's keep progress tracking as it's separate from sync
         if (playerEvent === "timeupdate") {
+          // Sync Subtitles
+          if (subtitleEngineRef.current) {
+            subtitleEngineRef.current.updateTime(currentTime);
+          }
+
           const now = Date.now();
           if (now - (window.lastProgressUpdate || 0) > 5000) {
             window.lastProgressUpdate = now;
@@ -428,6 +488,12 @@ const PartyPlayer = forwardRef(({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </button>
+              </div>
+            )}
+
+            {subtitleStatus && (
+              <div className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg text-[10px] font-bold text-white border border-white/10 shadow-lg animate-pulse">
+                {subtitleStatus}
               </div>
             )}
           </div>
