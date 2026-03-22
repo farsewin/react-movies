@@ -231,6 +231,11 @@ export default class WatchPartySync {
   // ─────────────────────────────────────────
 
   _interceptPlay(viewerTime) {
+    if (this.lastSyncLocalAt === 0) {
+      this._forcePause();
+      this._showToast();
+      return;
+    }
     const expectedTime = this.playing
       ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
       : this.lastSyncTime;
@@ -241,6 +246,10 @@ export default class WatchPartySync {
   }
 
   _interceptPause(viewerTime) {
+    if (this.lastSyncLocalAt === 0) {
+      this._showToast();
+      return;
+    }
     const expectedTime = this.playing
       ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
       : this.lastSyncTime;
@@ -253,6 +262,11 @@ export default class WatchPartySync {
   }
 
   _interceptSeek() {
+    if (this.lastSyncLocalAt === 0) {
+      this._forceSeek(0);
+      this._showToast();
+      return;
+    }
     const expectedTime = this.playing
       ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
       : this.lastSyncTime;
@@ -432,6 +446,10 @@ export default class WatchPartySync {
       this._applyResync(status.currentTime, status.playing);
     } catch {
       if (!resolved) {
+        if (this.lastSyncLocalAt === 0) {
+          this._applyResync(0, false);
+          return;
+        }
         const expectedTime = this.playing
           ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
           : this.lastSyncTime;
