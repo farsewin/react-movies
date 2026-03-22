@@ -243,8 +243,14 @@ export default class WatchPartySync {
       ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
       : this.lastSyncTime;
 
-    this._forcePause();
-    this._forceSeek(expectedTime);
+    // If host is already playing, just snap the time. 
+    // This prevents "AbortError: The play() request was interrupted by a call to pause()."
+    if (this.playing) {
+      this._forceSeek(expectedTime);
+    } else {
+      this._forcePause();
+      this._forceSeek(expectedTime);
+    }
     this._showToast();
   }
 

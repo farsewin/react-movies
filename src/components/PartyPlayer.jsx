@@ -129,8 +129,8 @@ const PartyPlayer = forwardRef(({
   const uiEpisode = displayedEpisode || iframeEpisode;
 
   const playerURL = isTV
-    ? `https://vidfast.pro/tv/${tmdbId}/${season}/${iframeEpisode}?autoPlay=true&nextButton=true&autoNext=false`
-    : `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`;
+    ? `https://vidfast.pro/tv/${tmdbId}/${season}/${iframeEpisode}?autoPlay=false&nextButton=true&autoNext=false`
+    : `https://vidfast.pro/movie/${tmdbId}?autoPlay=false`;
 
   // Keyboard controls
   const triggerSeek = (side) => {
