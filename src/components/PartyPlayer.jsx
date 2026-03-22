@@ -161,112 +161,88 @@ const PartyPlayer = forwardRef(({
   }, [isHost]);
 
   // ============================
-  // WatchPartySync Integration
+  // WatchPartySync Integration (v3)
   // ============================
   useEffect(() => {
-    if (!iframeRef.current || !shouldLoadIframe) return;
+    if (!iframeRef.current || !shouldLoadIframe || !roomDocId) return;
 
-    // Create WatchPartySync instance
-    watchPartyRef.current = new WatchPartySync({
-      iframe: iframeRef.current,
-      isHost,
-      onLocalEvent: (command) => {
-        // Host broadcasts to room via Appwrite
-        if (isHost && roomDocId) {
-          const newEpisode = command.action === 'seek' ? uiEpisode :
-                            (command.action === 'next' ? uiEpisode + 1 : uiEpisode);
-
-          if (command.action === 'next') {
-            if (onNativeNavigation) onNativeNavigation(newEpisode);
-          } else {
-            syncRoomState(roomDocId, command.action, Math.floor(command.time), {
-              episode: newEpisode,
-              sentAt: command.sentAt
-            });
-          }
-        }
-      },
-      onRemoteCommand: (command) => {
-        // Viewer receives command from host
-        if (!isHost) {
-          setIsSyncing(true);
-          watchPartyRef.current?.executeRemoteCommand(command.action, command.time);
-          setTimeout(() => setIsSyncing(false), 2000);
-        }
-      },
-      onStatusUpdate: (status) => {
-        // Track local state
-        if (watchPartyRef.current) {
-          watchPartyRef.current.viewerCurrentTime = status.time;
-        }
-      }
-    });
-
-    // Initial sync for viewers if roomState already available
-    if (!isHost && roomStateRef.current) {
-      try {
-        const room = roomStateRef.current;
-        watchPartyRef.current.syncToHost({
-          time: room.last_sync_time || 0,
-          playing: room.playback_status === 'play',
-          sentAt: room.last_sync_at ? new Date(room.last_sync_at).getTime() : Date.now()
+    // 1. Define the transport bridge between the sync engine and Appwrite
+    const transport = {
+      send: (cmd) => {
+        if (!isHost) return;
+        // Broadcast host action to room via Appwrite
+        // We use Math.floor for last_sync_time to avoid jitter in Appwrite db if needed,
+        // but WatchPartySync v3 allows sub-second. Let's use full float.
+        syncRoomState(roomDocId, cmd.action, cmd.time, {
+          sentAt: cmd.sentAt
         });
-        hasInitialSynced.current = true;
-      } catch (e) {
-        console.error('Initial syncToHost failed:', e);
+      },
+      onMessage: (callback) => {
+        // We use the roomState prop (from useWatchParty hook) to drive remote commands.
+        // This is where we bridge Appwrite real-time updates to the sync engine.
+        // We wrap this in a ref-like check or just let the effect handle it.
+        return () => {}; // No explicit unsub needed as we'll handle updates via the effect below
       }
-    }
-
-    // Set up message forwarding to WatchPartySync
-    const handleMessage = (event) => {
-      watchPartyRef.current?.handleMessage(event);
     };
 
-    window.addEventListener('message', handleMessage);
+    // 2. Create the v3 sync engine instance
+    watchPartyRef.current = new WatchPartySync({
+      iframe: iframeRef.current,
+      transport,
+      isHost,
+      isMobile
+    });
 
-    // For viewers: start polling to get status from iframe
-    let pollInterval = null;
-    if (!isHost) {
-      pollInterval = setInterval(() => {
-        watchPartyRef.current?.requestStatus();
-      }, 2500);
-    }
+    // 3. Keep UI isSyncing state in sync with the engine
+    const syncStatusInterval = setInterval(() => {
+      if (watchPartyRef.current && isSyncing !== watchPartyRef.current.isSyncing) {
+        setIsSyncing(watchPartyRef.current.isSyncing);
+      }
+    }, 500);
 
     return () => {
-      window.removeEventListener('message', handleMessage);
-      if (pollInterval) clearInterval(pollInterval);
-      // Cleanup WatchPartySync properly
+      if (syncStatusInterval) clearInterval(syncStatusInterval);
       if (watchPartyRef.current) {
         watchPartyRef.current.destroy();
         watchPartyRef.current = null;
       }
       hasInitialSynced.current = false;
     };
-  }, [isHost, shouldLoadIframe, roomDocId, uiEpisode, onNativeNavigation]);
+  }, [isHost, isMobile, shouldLoadIframe, roomDocId, isSyncing]);
 
-  // Handle initial sync when roomState arrives after WatchPartySync creation
+  // Handle roomState updates from Appwrite and forward to WatchPartySync transport
+  useEffect(() => {
+    if (isHost || !roomState || !watchPartyRef.current) return;
+
+    // Bridge roomState to the sync engine's internal _handleRemote method.
+    // We simulate a transport message based on the latest roomState.
+    const remoteCmd = {
+      action: roomState.playback_status,
+      time: roomState.last_sync_time || 0,
+      sentAt: roomState.last_sync_at ? new Date(roomState.last_sync_at).getTime() : Date.now()
+    };
+
+    // Only sync if it's actually a new command to prevent feedback loops
+    // (WatchPartySync v3 already has internal guards like lastSyncSentAt)
+    watchPartyRef.current._handleRemote(remoteCmd);
+  }, [roomState, isHost]);
+
+  // Handle initial sync when join mid-session
   useEffect(() => {
     if (!isHost && watchPartyRef.current && roomState && !hasInitialSynced.current) {
-      try {
         watchPartyRef.current.syncToHost({
           time: roomState.last_sync_time || 0,
           playing: roomState.playback_status === 'play',
           sentAt: roomState.last_sync_at ? new Date(roomState.last_sync_at).getTime() : Date.now()
         });
         hasInitialSynced.current = true;
-      } catch (e) {
-        console.error('Initial syncToHost failed:', e);
-      }
     }
   }, [roomState, isHost]);
 
-  // ============================
-  // Host: handle local events from iframe and broadcast
-  // ============================
+  // Handle local events from host player
   useEffect(() => {
     if (!isHost || !watchPartyRef.current) return;
 
-    // Setup listener for PLAYER_EVENT and MEDIA_DATA
     const handleMessage = (event) => {
       const isVidfast = /vidfast\.(pro|in|io|me|net|pm|xyz)/.test(event.origin);
       if (!isVidfast || !event.data) return;
@@ -274,33 +250,29 @@ const PartyPlayer = forwardRef(({
       if (event.data.type === "PLAYER_EVENT") {
         const { event: playerEvent, currentTime, duration } = event.data.data;
 
-        if (playerEvent === "play" || playerEvent === "pause" || playerEvent === "seeked" || playerEvent === "next") {
-          watchPartyRef.current.handleLocalEvent(playerEvent, currentTime);
-        }
-
-        // Progress tracking
-        if (playerEvent === "timeupdate" && isHost) {
+        // VidFast sends 'PLAYER_EVENT' for play/pause/seeked
+        // These are handled by WatchPartySync v3 internally if we forward them
+        // Wait, WatchPartySync v3 adds its own window listener in constructor!
+        // So we don't need to manually call handleLocalEvent unless we want to overide.
+        
+        // Let's keep progress tracking as it's separate from sync
+        if (playerEvent === "timeupdate") {
           const now = Date.now();
           if (now - (window.lastProgressUpdate || 0) > 5000) {
             window.lastProgressUpdate = now;
-            if (isTV) {
-              updateWatchProgress(tmdbId, currentTime, duration, { media_type: 'tv', season, episode: uiEpisode });
-            } else {
-              updateWatchProgress(tmdbId, currentTime, duration, { media_type: 'movie' });
-            }
+            updateWatchProgress(tmdbId, currentTime, duration, isTV ? { media_type: 'tv', season, episode: uiEpisode } : { media_type: 'movie' });
           }
         }
       }
 
       if (event.data.type === "MEDIA_DATA") {
         localStorage.setItem('vidFastProgress', JSON.stringify(event.data.data));
-
         if (isHost && isTV) {
           const showKey = `t${tmdbId}`;
-          if (event.data.data && event.data.data[showKey]) {
+          if (event.data.data?.[showKey]) {
             const newEpisode = event.data.data[showKey].last_episode_watched;
-            if (newEpisode && newEpisode > uiEpisode) {
-              if (onNativeNavigation) onNativeNavigation(newEpisode);
+            if (newEpisode && newEpisode > uiEpisode && onNativeNavigation) {
+              onNativeNavigation(newEpisode);
             }
           }
         }
@@ -311,47 +283,6 @@ const PartyPlayer = forwardRef(({
     return () => window.removeEventListener('message', handleMessage);
   }, [isHost, isTV, tmdbId, season, uiEpisode, onNativeNavigation]);
 
-  // Handle MEDIA_DATA for viewer progress persistence
-  useEffect(() => {
-    if (isHost) return;
-
-    const handleMessage = (event) => {
-      const isVidfast = /vidfast\.(pro|in|io|me|net|pm|xyz)/.test(event.origin);
-      if (!isVidfast || !event.data) return;
-
-      if (event.data.type === "MEDIA_DATA") {
-        localStorage.setItem('vidFastProgress', JSON.stringify(event.data.data));
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [isHost]);
-
-  // Viewer: Execute host commands from roomState
-  useEffect(() => {
-    if (isHost || !roomState || !watchPartyRef.current) return;
-
-    const { playback_status, last_sync_time } = roomState;
-    const statusKey = `${playback_status}:${Math.floor(last_sync_time)}`;
-
-    const hasStatusChanged = lastCommandRef.current.key !== statusKey;
-    const timeDiff = Math.abs((lastCommandRef.current.time || 0) - last_sync_time);
-    const hasSeekChanged = timeDiff > 2;
-
-    if (hasStatusChanged || hasSeekChanged) {
-      lastCommandRef.current = { key: statusKey, time: last_sync_time };
-
-      console.log(`[PartyPlayer] Executing host command: ${playback_status} at ${last_sync_time}s`);
-
-      if (hasSeekChanged) {
-        watchPartyRef.current.executeRemoteCommand('seek', last_sync_time);
-      } else if (hasStatusChanged) {
-        // For play/pause commands, time is not needed
-        watchPartyRef.current.executeRemoteCommand(playback_status, undefined);
-      }
-    }
-  }, [roomState, isHost]);
 
   // Gesture system for mobile
   const lastTapRef = useRef(0);
