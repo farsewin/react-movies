@@ -263,9 +263,8 @@ export default class WatchPartySync {
   // ─────────────────────────────────────────
 
   _trackDrift(viewerTime) {
-    // Skip accumulation during cooldown — samples against stale anchor pollute the
-    // average and caused spurious re-seeks in v2
-    if (this.isSyncing) return;
+    // Skip accumulation during cooldown or if we haven't synced with host yet (v3 jump bug)
+    if (this.isSyncing || this.lastSyncLocalAt === 0) return;
 
     const expectedTime = this.playing
       ? this.lastSyncTime + (Date.now() - this.lastSyncLocalAt) / 1000
@@ -282,10 +281,10 @@ export default class WatchPartySync {
   // ─────────────────────────────────────────
 
   _handleDrift() {
-    if (this.isHost || this.isSyncing) return;
+    if (this.isHost || this.isSyncing || this.lastSyncLocalAt === 0) return;
 
     // Guard against empty array divide-by-zero (v2 produced NaN on first timeupdate)
-    if (this.driftSamples.length === 0) return;
+    if (this.driftSamples.length < 3) return; // Need at least 3 samples to average (v3 change)
 
     const avgDrift =
       this.driftSamples.reduce((a, b) => a + b, 0) / this.driftSamples.length;
