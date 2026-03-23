@@ -449,9 +449,36 @@ const PartyPlayer = forwardRef(({
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Voice Chat Toggle */}
+            {voiceChatProps && voiceChatProps.isConnected && (
+              <button
+                onClick={(e) => { e.stopPropagation(); voiceChatProps.toggleMute(); }}
+                className={`p-2 rounded-full transition-all hover:scale-110 active:scale-90 border border-white/10 shadow-lg flex items-center justify-center size-10 ${
+                  voiceChatProps.isMuted
+                    ? 'bg-black/40 text-rose-500/60 hover:text-rose-500'
+                    : 'bg-indigo-600/90 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)] border-indigo-400/50'
+                }`}
+                title={voiceChatProps.isMuted ? 'Unmute microphone' : 'Mute microphone'}
+              >
+                {voiceChatProps.isMuted ? (
+                  <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <div className="relative">
+                    <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    <span className="absolute -top-1 -right-1 size-2 bg-emerald-400 rounded-full border border-black animate-pulse" />
+                  </div>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => setIsChatVisible(!isChatVisible)}
-              className={`transition-all hover:scale-110 active:scale-95 ${isChatVisible ? 'text-indigo-400' : 'text-white/40 hover:text-white'}`}
+              className={`p-2 transition-all hover:scale-110 active:scale-95 ${isChatVisible ? 'text-indigo-400' : 'text-white/40 hover:text-white'}`}
             >
               <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
             </button>
