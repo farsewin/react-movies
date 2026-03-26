@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createWatchParty } from '../services/appwrite';
-import { generateRoomCode } from '../utils/roomCode';
-import { useUser } from '../context/UserContext.jsx';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { createWatchParty } from "../services/appwrite";
+import { generateRoomCode } from "../utils/roomCode";
+import { useUser } from "../context/UserContext.jsx";
 
 export const useCreateParty = () => {
   const { user } = useUser();
@@ -19,20 +19,20 @@ export const useCreateParty = () => {
     try {
       const roomCode = generateRoomCode();
       const movieWithTitle = { ...movie, title: movie.title || movie.name };
-      
+
       await createWatchParty(roomCode, movieWithTitle);
-      
-      const isMobile = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
+
       try {
         await document.documentElement.requestFullscreen();
         if (screen.orientation?.lock) {
-          screen.orientation.lock("landscape").catch(e => console.warn("Orientation lock failed:", e));
+          screen.orientation
+            .lock("landscape")
+            .catch((e) => console.warn("Orientation lock failed:", e));
         }
       } catch (err) {
         console.warn("Fullscreen request failed:", err);
       }
-      
+
       navigate(`/party/${roomCode}`);
     } catch (error) {
       console.error("Failed to create party:", error);

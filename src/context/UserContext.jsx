@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser } from '../services/appwrite';
+import { createContext, useContext, useState, useEffect } from "react";
+import PropTypes from "prop-types";
+import { getCurrentUser } from "../services/appwrite";
 
 const UserContext = createContext();
 
@@ -30,10 +31,14 @@ export const UserProvider = ({ children }) => {
   );
 };
 
+UserProvider.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
 export const useUser = () => {
   const context = useContext(UserContext);
   if (context === undefined) {
-    throw new Error('useUser must be used within a UserProvider');
+    throw new Error("useUser must be used within a UserProvider");
   }
   return context;
 };

@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Room, RoomEvent, Track } from 'livekit-client';
-import { generateLiveKitToken, LIVEKIT_URL } from '../services/livekit';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Room, RoomEvent, Track } from "livekit-client";
+import { generateLiveKitToken, LIVEKIT_URL } from "../services/livekit";
 
 /**
  * useVoiceChat — manages a LiveKit Room connection for voice chat.
@@ -27,9 +27,9 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
 
     const elements = track.attach(); // Returns HTMLMediaElement[]
     elements.forEach((el) => {
-      el.setAttribute('data-livekit-participant', participantIdentity);
+      el.setAttribute("data-livekit-participant", participantIdentity);
       el.autoplay = true;
-      el.style.display = 'none'; // invisible, audio only
+      el.style.display = "none"; // invisible, audio only
       document.body.appendChild(el);
     });
     // Store reference for cleanup
@@ -48,7 +48,11 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
       audioElementsRef.current.delete(track.sid);
     }
     // Also call track.detach() to clean up livekit internals
-    try { track.detach(); } catch (_) {}
+    try {
+      track.detach();
+    } catch {
+      // Best-effort cleanup only.
+    }
   }, []);
 
   // Build participant list
@@ -80,7 +84,7 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         const token = await generateLiveKitToken(
           roomCode,
           user.$id,
-          user.name || user.$id
+          user.name || user.$id,
         );
 
         if (cancelled) return;
@@ -101,11 +105,14 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         // === Remote track events ===
 
         // A remote participant published a track → subscribe and attach audio
-        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-          if (track.kind === Track.Kind.Audio) {
-            attachAudioTrack(track, participant.identity);
-          }
-        });
+        room.on(
+          RoomEvent.TrackSubscribed,
+          (track, publication, participant) => {
+            if (track.kind === Track.Kind.Audio) {
+              attachAudioTrack(track, participant.identity);
+            }
+          },
+        );
 
         // Remote track removed → clean up audio element
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
@@ -115,7 +122,9 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         });
 
         // === Participant events ===
-        room.on(RoomEvent.ParticipantConnected, () => refreshParticipants(room));
+        room.on(RoomEvent.ParticipantConnected, () =>
+          refreshParticipants(room),
+        );
         room.on(RoomEvent.ParticipantDisconnected, (p) => {
           refreshParticipants(room);
           setSpeakingParticipants((prev) => {
@@ -155,8 +164,8 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         // Explicitly try to start audio playback (handles browser autoplay policy)
         try {
           await room.startAudio();
-        } catch (_) {
-          // Will be retried on first user interaction via AudioPlaybackStatusChanged
+        } catch {
+          // Will be retried on first user interaction via AudioPlaybackStatusChanged.
         }
 
         // Attach any already-subscribed remote tracks (e.g. if joining late)
@@ -175,7 +184,7 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         // Join muted — no mic until user clicks unmute
         await room.localParticipant.setMicrophoneEnabled(false);
       } catch (err) {
-        console.error('[useVoiceChat] Connection error:', err);
+        console.error("[useVoiceChat] Connection error:", err);
         setError(err.message);
       }
     };
@@ -220,7 +229,7 @@ export const useVoiceChat = (roomCode, user, enabled = true) => {
         room.startAudio().catch(() => {});
       }
     } catch (err) {
-      console.error('[useVoiceChat] Toggle mute error:', err);
+      console.error("[useVoiceChat] Toggle mute error:", err);
     }
   }, [isMuted, isConnected]);
 

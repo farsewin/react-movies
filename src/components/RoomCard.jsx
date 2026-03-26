@@ -1,13 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import Spinner from './Spinner.jsx';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import PropTypes from "prop-types";
+import Spinner from "./Spinner.jsx";
+import { useNavigate } from "react-router-dom";
 
-const API_BASE_URL = 'https://api.themoviedb.org/3';
+const API_BASE_URL = "https://api.themoviedb.org/3";
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
 const RoomCard = ({ room }) => {
   const navigate = useNavigate();
-  const { room_code, movie_title, poster_url, creator_name, media_type, movie_id } = room;
+  const {
+    room_code,
+    movie_title,
+    poster_url,
+    creator_name,
+    media_type,
+    movie_id,
+  } = room;
   const [fetchedPoster, setFetchedPoster] = useState(null);
   const [imageError, setImageError] = useState(false);
   const [posterLoading, setPosterLoading] = useState(false);
@@ -23,18 +31,20 @@ const RoomCard = ({ room }) => {
     const fetchPoster = async () => {
       setPosterLoading(true);
       try {
-        const type = media_type || 'movie';
+        const type = media_type || "movie";
         const response = await fetch(`${API_BASE_URL}/${type}/${movie_id}`, {
-          method: 'GET',
+          method: "GET",
           headers: {
-            accept: 'application/json',
-            Authorization: `Bearer ${API_KEY}`
-          }
+            accept: "application/json",
+            Authorization: `Bearer ${API_KEY}`,
+          },
         });
         if (response.ok) {
           const data = await response.json();
           if (data.poster_path) {
-            setFetchedPoster(`https://image.tmdb.org/t/p/w500${data.poster_path}`);
+            setFetchedPoster(
+              `https://image.tmdb.org/t/p/w500${data.poster_path}`,
+            );
           }
         }
       } catch (error) {
@@ -48,8 +58,12 @@ const RoomCard = ({ room }) => {
   }, [poster_url, movie_id, media_type]);
 
   const handleJoin = async () => {
-    const isMobile = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
+    const isMobile =
+      window.innerWidth < 1024 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent,
+      );
+
     if (!isMobile) {
       try {
         await document.documentElement.requestFullscreen();
@@ -68,11 +82,14 @@ const RoomCard = ({ room }) => {
       <div className="relative aspect-[2/3] overflow-hidden bg-dark-100 flex items-center justify-center">
         {currentPoster && !imageError ? (
           <>
-            <img 
-              src={currentPoster} 
+            <img
+              src={currentPoster}
               alt={movie_title}
               onLoad={() => setPosterLoading(false)}
-              onError={() => { setImageError(true); setPosterLoading(false); }}
+              onError={() => {
+                setImageError(true);
+                setPosterLoading(false);
+              }}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             />
 
@@ -84,29 +101,51 @@ const RoomCard = ({ room }) => {
           </>
         ) : (
           <div className="flex flex-col items-center justify-center p-6 text-center">
-            <svg className="size-16 text-white/10 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg
+              className="size-16 text-white/10 mb-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
             <p className="text-white/40 font-black text-sm uppercase tracking-widest leading-loose">
-              Poster<br/>Not Available
+              Poster
+              <br />
+              Not Available
             </p>
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-dark-100 via-transparent to-transparent opacity-60" />
-        
+
         {/* Badge for Media Type */}
         <div className="absolute top-3 left-3 flex gap-2">
           <span className="bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
-            {media_type === 'tv' ? 'TV Show' : 'Movie'}
+            {media_type === "tv" ? "TV Show" : "Movie"}
           </span>
         </div>
 
         {/* Member Count Overlay (Placeholder for now) */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10">
-           <svg className="size-3 text-light-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-           </svg>
-           <span className="text-[10px] font-bold text-white">1</span>
+          <svg
+            className="size-3 text-light-200"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+            />
+          </svg>
+          <span className="text-[10px] font-bold text-white">1</span>
         </div>
       </div>
 
@@ -120,10 +159,10 @@ const RoomCard = ({ room }) => {
             <span className="w-1 h-3 bg-red-500 rounded-full" />
             {movie_title}
           </p>
-          
+
           <div className="mt-4 flex items-center gap-2">
             <div className="size-6 rounded-full bg-indigo-600/30 flex items-center justify-center text-[10px] font-bold text-indigo-400 border border-indigo-500/20">
-              {creator_name?.charAt(0) || 'U'}
+              {creator_name?.charAt(0) || "U"}
             </div>
             <p className="text-gray-400 text-[10px] font-semibold">
               By <span className="text-light-100">{creator_name}</span>
@@ -131,18 +170,40 @@ const RoomCard = ({ room }) => {
           </div>
         </div>
 
-        <button 
+        <button
           onClick={handleJoin}
           className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-[0.98]"
         >
-          <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+          <svg
+            className="size-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+            />
           </svg>
           JOIN ROOM
         </button>
       </div>
     </div>
   );
+};
+
+RoomCard.propTypes = {
+  room: PropTypes.shape({
+    room_code: PropTypes.string.isRequired,
+    room_title: PropTypes.string,
+    movie_title: PropTypes.string,
+    poster_url: PropTypes.string,
+    creator_name: PropTypes.string,
+    media_type: PropTypes.string,
+    movie_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  }).isRequired,
 };
 
 export default RoomCard;

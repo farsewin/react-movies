@@ -1,5 +1,3 @@
-import React from 'react';
-
 export const MovieCardSkeleton = () => {
   return (
     <div className="movie-card animate-pulse">
