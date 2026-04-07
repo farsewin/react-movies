@@ -32,7 +32,8 @@ class WatchPartySync {
 
     // Initialize
     this.setupEventListeners();
-    this.startDriftCorrection();
+    // Delay drift correction start to ensure iframe is ready
+    setTimeout(() => this.startDriftCorrection(), 2000);
   }
 
   // 2) Implement secure sendToPlayer method
@@ -265,6 +266,10 @@ class WatchPartySync {
 
   // 10) Promise-based getStatus
   async getStatus() {
+    // Check if iframe is ready before attempting to get status
+    if (!this.iframe?.contentWindow) {
+      throw new Error("Iframe not ready");
+    }
     return new Promise((resolve, reject) => {
       // Clear any pending request
       if (this.pendingStatusTimeout) {
@@ -299,8 +304,9 @@ class WatchPartySync {
   // 11) Periodic drift correction
   startDriftCorrection() {
     this.driftInterval = setInterval(() => {
-      if (!this.isHost) {
+      if (!this.isHost && this.iframe?.contentWindow) {
         // For viewers, check if we're significantly behind host
+        // Only run drift correction if iframe is ready
         this.getStatus()
           .then((status) => {
             const drift = Math.abs(status.currentTime - this.lastKnownHostTime);
@@ -312,8 +318,14 @@ class WatchPartySync {
               setTimeout(() => (this.isSyncing = false), 1000);
             }
           })
-          .catch(() => {
-            // Ignore timeout errors during drift correction
+          .catch((error) => {
+            // Ignore errors during drift correction (iframe not ready, timeout, etc.)
+            if (error.message !== "Iframe not ready") {
+              console.debug(
+                "WatchPartySync: drift correction skipped:",
+                error.message,
+              );
+            }
           });
       }
     }, 3000); // Every 3 seconds
