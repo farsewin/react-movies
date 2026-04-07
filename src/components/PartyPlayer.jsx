@@ -208,18 +208,12 @@ const PartyPlayer = forwardRef(
         send: (cmd) => {
           if (!isHost) return;
           // Broadcast host action to room via Appwrite
-          // We use Math.floor for last_sync_time to avoid jitter in Appwrite db if needed,
-          // but WatchPartySync v3 allows sub-second. Let's use full float.
           syncRoomState(roomDocId, cmd.action, cmd.time, {
             sentAt: cmd.sentAt,
           });
         },
-        onMessage: () => {
-          // We use the roomState prop (from useWatchParty hook) to drive remote commands.
-          // This is where we bridge Appwrite real-time updates to the sync engine.
-          // We wrap this in a ref-like check or just let the effect handle it.
-          return () => {}; // No explicit unsub needed as we'll handle updates via the effect below
-        },
+        senderId: user?.$id,
+        roomId: roomCode,
       };
 
       // 2. Create the v3 sync engine instance
