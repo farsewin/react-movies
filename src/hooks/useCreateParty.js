@@ -11,7 +11,6 @@ export const useCreateParty = () => {
 
   const handleCreateParty = async (movie) => {
     if (!user) {
-      alert("Please login to start a watch party!");
       return;
     }
 
@@ -36,7 +35,6 @@ export const useCreateParty = () => {
       navigate(`/party/${roomCode}`);
     } catch (error) {
       console.error("Failed to create party:", error);
-      alert("Could not create watch party. Please try again.");
     } finally {
       setIsCreating(false);
     }

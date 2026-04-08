@@ -1,6 +1,6 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { signup, loginEmailPassword } from "../services/appwrite";
+import { signup, loginEmailPassword, loginAsGuest } from "../services/appwrite";
 
 const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -29,6 +29,21 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
       setError(
         err.message || "Authentication failed. Please check your credentials.",
       );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setError("");
+    setIsLoading(true);
+
+    try {
+      await loginAsGuest();
+      onAuthSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message || "Guest login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +145,20 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
             {isLoading ? "Processing..." : isLogin ? "Login" : "Sign Up"}
           </button>
         </form>
+
+        <div className="mt-6 mb-6 flex items-center">
+          <div className="flex-1 border-t border-light-100/10"></div>
+          <span className="px-4 text-light-200 text-sm">or</span>
+          <div className="flex-1 border-t border-light-100/10"></div>
+        </div>
+
+        <button
+          onClick={handleGuestLogin}
+          disabled={isLoading}
+          className="w-full bg-dark-200 hover:bg-dark-300 border border-light-100/20 text-light-200 hover:text-white font-medium py-3 rounded-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
+        >
+          {isLoading ? "Processing..." : "Continue as Guest"}
+        </button>
 
         <p className="mt-8 text-center text-light-200">
           {isLogin ? "Don't have an account? " : "Already have an account? "}

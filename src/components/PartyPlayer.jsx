@@ -13,6 +13,8 @@ import WatchPartySync from "./WatchPartySync";
 import ArabicSubtitleEngine from "./ArabicSubtitleEngine";
 import SubDLProvider from "./SubDLProvider";
 
+const debugLog = () => {};
+
 const PartyPlayer = forwardRef(
   (
     {
@@ -32,6 +34,16 @@ const PartyPlayer = forwardRef(
     },
     ref,
   ) => {
+    // Test debug logging
+    debugLog("PartyPlayer: component rendered", {
+      roomCode,
+      userId: user?.$id,
+      hostId: roomState?.creator_id,
+      isHost: user?.$id === roomState?.creator_id,
+      roomStateLoaded: !!roomState,
+      roomDocId,
+    });
+
     const iframeRef = useRef(null);
     const containerRef = useRef(null);
     const watchPartyRef = useRef(null);
@@ -50,7 +62,14 @@ const PartyPlayer = forwardRef(
     const [isSyncing, setIsSyncing] = useState(false);
     const controlsTimeoutRef = useRef(null);
 
-    const isHost = user?.$id === movie?.creator_id && !!movie?.creator_id;
+    const isHost = user?.$id === roomState?.creator_id;
+
+    debugLog("PartyPlayer: isHost calculation", {
+      userId: user?.$id,
+      creatorId: roomState?.creator_id,
+      isHost,
+      roomStateLoaded: !!roomState,
+    });
 
     // Mobile detection
     const isMobile =
@@ -167,20 +186,31 @@ const PartyPlayer = forwardRef(
 
     // Keyboard controls
     const triggerSeek = (side) => {
-      const player = iframeRef.current?.contentWindow;
-      if (!player) return;
+      debugLog("PartyPlayer: triggerSeek called", {
+        side,
+        hasWatchPartyRef: !!watchPartyRef.current,
+      });
+      if (!watchPartyRef.current) return;
 
       const delta = side === "left" ? -10 : 10;
-      const baseTime = Math.floor(watchPartyRef.current?.currentTime || 0);
+      const baseTime = Math.floor(watchPartyRef.current.lastKnownHostTime || 0);
+      const newTime = Math.max(0, baseTime + delta);
+
+      debugLog("PartyPlayer: seeking", { delta, baseTime, newTime });
 
       setSeekFeedback(side);
-      player.postMessage({ command: "seek", time: baseTime + delta }, "*");
+      watchPartyRef.current.seek(newTime);
 
       setTimeout(() => setSeekFeedback(null), 300);
     };
 
     useEffect(() => {
       const handleKeyDown = (e) => {
+        debugLog("PartyPlayer: keydown event", {
+          code: e.code,
+          isHost,
+          hasWatchPartyRef: !!watchPartyRef.current,
+        });
         if (!isHost) return;
         if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
           return;
@@ -191,6 +221,12 @@ const PartyPlayer = forwardRef(
         } else if (e.code === "ArrowRight") {
           e.preventDefault();
           triggerSeek("right");
+        } else if (e.code === "Space") {
+          e.preventDefault();
+          debugLog("PartyPlayer: spacebar pressed for play/pause");
+          if (watchPartyRef.current) {
+            watchPartyRef.current.playPause();
+          }
         }
       };
       window.addEventListener("keydown", handleKeyDown);
@@ -201,27 +237,67 @@ const PartyPlayer = forwardRef(
     // WatchPartySync Integration (v3)
     // ============================
     useEffect(() => {
-      if (!iframeRef.current || !shouldLoadIframe || !roomDocId) return;
+      debugLog("PartyPlayer: WatchPartySync useEffect running", {
+        isHost,
+        shouldLoadIframe,
+        roomDocId: !!roomDocId,
+        iframeReady: !!iframeRef.current,
+        userReady: !!user,
+        roomStateReady: !!roomState,
+      });
+
+      if (
+        !iframeRef.current ||
+        !shouldLoadIframe ||
+        !roomDocId ||
+        !user ||
+        !roomState
+      ) {
+        debugLog("PartyPlayer: WatchPartySync useEffect early return", {
+          iframeReady: !!iframeRef.current,
+          shouldLoadIframe,
+          roomDocId: !!roomDocId,
+          userReady: !!user,
+          roomStateReady: !!roomState,
+        });
+        return;
+      }
 
       // 1. Define the transport bridge between the sync engine and Appwrite
       const transport = {
         send: (cmd) => {
-          if (!isHost) return;
+          debugLog("PartyPlayer: transport.send called with command", cmd);
+          if (!isHost) {
+            debugLog("PartyPlayer: not host, transport.send ignored");
+            return;
+          }
           // Broadcast host action to room via Appwrite
+          debugLog("PartyPlayer: calling syncRoomState", {
+            roomDocId,
+            action: cmd.action,
+            time: cmd.time,
+          });
           syncRoomState(roomDocId, cmd.action, cmd.time, {
             sentAt: cmd.sentAt,
           });
+          debugLog("PartyPlayer: syncRoomState called successfully");
         },
         senderId: user?.$id,
         roomId: roomCode,
       };
 
       // 2. Create the v3 sync engine instance
-      watchPartyRef.current = new WatchPartySync({
-        iframe: iframeRef.current,
+      watchPartyRef.current = new WatchPartySync(
+        iframeRef.current,
         transport,
         isHost,
         isMobile,
+      );
+
+      debugLog("PartyPlayer: WatchPartySync created", {
+        isHost,
+        roomCode,
+        roomDocId,
       });
 
       // 3. Keep UI isSyncing state in sync with the engine
@@ -238,7 +314,7 @@ const PartyPlayer = forwardRef(
         }
         hasInitialSynced.current = false;
       };
-    }, [isHost, isMobile, shouldLoadIframe, roomDocId]);
+    }, [isHost, isMobile, shouldLoadIframe, roomDocId, user, roomState]);
 
     // ============================
     // Subtitle System Integration
@@ -295,6 +371,8 @@ const PartyPlayer = forwardRef(
     useEffect(() => {
       if (isHost || !roomState || !watchPartyRef.current) return;
 
+      debugLog("PartyPlayer: received roomState update", roomState);
+
       // Bridge roomState to the sync engine public remote-command handler.
       // We simulate a transport message based on the latest roomState.
       const remoteCmd = {
@@ -304,6 +382,11 @@ const PartyPlayer = forwardRef(
           ? new Date(roomState.last_sync_at).getTime()
           : Date.now(),
       };
+
+      debugLog(
+        "PartyPlayer: forwarding remoteCmd to WatchPartySync",
+        remoteCmd,
+      );
 
       // Only sync if it's actually a new command to prevent feedback loops
       // (WatchPartySync v3 already has internal guards like lastSyncSentAt)
@@ -493,7 +576,6 @@ const PartyPlayer = forwardRef(
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(roomCode);
-                  alert("Room Code Copied!");
                 }}
                 className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-light-200 transition-all hover:scale-105 active:scale-95 border border-white/5 flex items-center gap-2"
               >

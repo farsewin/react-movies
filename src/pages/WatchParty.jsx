@@ -59,7 +59,13 @@ const WatchParty = () => {
         setPlayerEpisode(ep);
       }
     }
-  }, [roomState?.episode, party?.episode, isHost, displayedEpisode, playerEpisode]);
+  }, [
+    roomState?.episode,
+    party?.episode,
+    isHost,
+    displayedEpisode,
+    playerEpisode,
+  ]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode);
@@ -114,7 +120,6 @@ const WatchParty = () => {
       try {
         const prty = await getWatchParty(roomCode);
         if (!prty) {
-          alert("Party not found");
           navigate("/");
           return;
         }
@@ -265,7 +270,12 @@ const WatchParty = () => {
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[10px] text-light-200 uppercase font-bold">
-                        Episode {isSeasonLoading ? "Loading..." : totalEpisodes ? `/ ${totalEpisodes}` : ""}
+                        Episode{" "}
+                        {isSeasonLoading
+                          ? "Loading..."
+                          : totalEpisodes
+                            ? `/ ${totalEpisodes}`
+                            : ""}
                       </span>
                       <div className="flex items-center gap-2">
                         <input

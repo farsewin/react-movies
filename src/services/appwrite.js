@@ -19,6 +19,8 @@ const client = new Client()
 const database = new Databases(client);
 const account = new Account(client);
 
+const debugLog = () => {};
+
 // --- Auth Services ---
 
 export const signup = async (email, password, name) => {
@@ -46,6 +48,17 @@ export const logout = async () => {
     await account.deleteSession("current");
   } catch (error) {
     console.error("Logout error:", error);
+  }
+};
+
+export const loginAsGuest = async () => {
+  try {
+    // Create an anonymous session
+    const session = await account.createAnonymousSession();
+    return session;
+  } catch (error) {
+    console.error("Guest login error:", error);
+    throw error;
   }
 };
 
@@ -171,6 +184,13 @@ export const syncRoomState = async (
   tvMeta = {},
 ) => {
   try {
+    debugLog("appwrite: syncRoomState called with", {
+      roomIdentifier,
+      playbackStatus,
+      lastSyncTime,
+      tvMeta,
+    });
+
     let documentId = roomIdentifier;
 
     // If identifier is a room code (roughly 6-8 chars), we need to find the document ID
@@ -191,12 +211,16 @@ export const syncRoomState = async (
     if (tvMeta.custom_subtitle_url !== undefined)
       data.custom_subtitle_url = tvMeta.custom_subtitle_url;
 
+    debugLog("appwrite: updating document with data", data);
+
     await database.updateDocument(
       DATABASE_ID,
       WATCH_PARTIES_TABLE_ID,
       documentId,
       data,
     );
+
+    debugLog("appwrite: syncRoomState completed successfully");
   } catch (error) {
     console.error("Sync room state error:", error);
   }
