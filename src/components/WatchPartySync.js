@@ -11,6 +11,32 @@ const VIDFAST_ORIGINS = [
 
 const debugLog = () => {};
 
+const pushCappedSample = (arr, value, limit = 300) => {
+  arr.push(value);
+  if (arr.length > limit) arr.shift();
+};
+
+const percentile = (arr, p) => {
+  if (!arr.length) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.floor((sorted.length - 1) * p);
+  return sorted[idx];
+};
+
+const getHealthStatus = ({ driftP95Sec, correctionPerMin, staleDrops }) => {
+  if (driftP95Sec === null) return { label: "Starting", tone: "neutral" };
+
+  if (staleDrops > 2 || driftP95Sec > 1.5 || correctionPerMin > 3) {
+    return { label: "Poor", tone: "bad" };
+  }
+
+  if (driftP95Sec > 1 || correctionPerMin > 1.5) {
+    return { label: "Good", tone: "warn" };
+  }
+
+  return { label: "Perfect", tone: "good" };
+};
+
 class WatchPartySync {
   constructor(iframe, transport, isHost, isMobile = false) {
     debugLog("WatchPartySync: constructor called with", {
@@ -38,17 +64,223 @@ class WatchPartySync {
     this.maxRetries = 5;
     this.retryDelay = 350;
     this.isSyncing = false; // Add isSyncing property for UI feedback
+    this.metricsInterval = null;
+    this.metricsUi = null;
+    this.metricsLogLines = [];
+    this.healthBadge = null;
+    this.metrics = {
+      startedAt: Date.now(),
+      lastSummaryAt: Date.now(),
+      hostSyncSentAt: null,
+      syncIntervalsMs: [],
+      driftSamplesSec: [],
+      correctionCount: 0,
+      staleCommandDrops: 0,
+      receivedSyncCount: 0,
+      receivedSeekCount: 0,
+    };
 
     // Initialize
     this.setupEventListeners();
+    this.initMetricsUi();
     // Delay drift correction start to ensure iframe is ready
     setTimeout(() => this.startDriftCorrection(), 2500);
+    this.metricsInterval = setInterval(() => this.logMetricsSummary(), 10000);
 
     // Test debug logging
     debugLog("WatchPartySync: initialized", {
       isHost: this.isHost,
       isMobile: this.isMobile,
     });
+  }
+
+  initMetricsUi() {
+    if (typeof document === "undefined") return;
+
+    const existing = document.getElementById("watchparty-metrics-panel");
+    if (existing) {
+      const output = existing.querySelector("pre");
+      this.metricsUi = {
+        root: existing,
+        output,
+      };
+      return;
+    }
+
+    const root = document.createElement("section");
+    root.id = "watchparty-metrics-panel";
+    root.style.cssText = [
+      "position: fixed",
+      "right: 12px",
+      "bottom: 12px",
+      "width: min(420px, calc(100vw - 24px))",
+      "max-height: 40vh",
+      "background: rgba(8, 10, 16, 0.92)",
+      "border: 1px solid rgba(255,255,255,0.18)",
+      "border-radius: 10px",
+      "padding: 10px",
+      "z-index: 10000",
+      "box-shadow: 0 8px 30px rgba(0,0,0,0.45)",
+      "font-family: Consolas, 'Courier New', monospace",
+      "color: #dbe6ff",
+      "font-size: 12px",
+    ].join(";");
+
+    const header = document.createElement("div");
+    header.style.cssText =
+      "display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;";
+
+    const title = document.createElement("div");
+    title.textContent = "Watch Party Metrics";
+    title.style.cssText = "font-weight: 700; letter-spacing: 0.3px;";
+
+    const healthBadge = document.createElement("span");
+    healthBadge.textContent = "Starting";
+    healthBadge.style.cssText = [
+      "display: inline-flex",
+      "align-items: center",
+      "justify-content: center",
+      "padding: 3px 8px",
+      "border-radius: 999px",
+      "font-size: 11px",
+      "font-weight: 700",
+      "letter-spacing: 0.2px",
+      "background: rgba(255,255,255,0.12)",
+      "color: #dbe6ff",
+      "border: 1px solid rgba(255,255,255,0.16)",
+      "min-width: 72px",
+      "text-align: center",
+    ].join(";");
+
+    this.healthBadge = healthBadge;
+
+    header.appendChild(title);
+    header.appendChild(healthBadge);
+
+    const actions = document.createElement("div");
+    actions.style.cssText = "display: flex; gap: 8px; margin-bottom: 8px;";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.textContent = "Copy";
+    copyBtn.style.cssText =
+      "background: #3f63ff; color: white; border: 0; border-radius: 6px; padding: 4px 8px; cursor: pointer;";
+    copyBtn.onclick = () => {
+      const content = this.metricsLogLines.join("\n");
+      navigator.clipboard
+        .writeText(content)
+        .then(() => {
+          copyBtn.textContent = "Copied";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+          }, 1200);
+        })
+        .catch(() => {
+          copyBtn.textContent = "Copy failed";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+          }, 1200);
+        });
+    };
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.textContent = "Clear";
+    clearBtn.style.cssText =
+      "background: #2a2f45; color: #dbe6ff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 4px 8px; cursor: pointer;";
+    clearBtn.onclick = () => {
+      this.metricsLogLines = [];
+      if (this.metricsUi?.output) {
+        this.metricsUi.output.textContent = "";
+      }
+    };
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(clearBtn);
+
+    const output = document.createElement("pre");
+    output.style.cssText =
+      "margin: 0; white-space: pre-wrap; line-height: 1.35; overflow: auto; max-height: calc(40vh - 68px);";
+
+    root.appendChild(header);
+    root.appendChild(actions);
+    root.appendChild(output);
+    document.body.appendChild(root);
+
+    this.metricsUi = { root, output };
+  }
+
+  appendMetricsLog(entry) {
+    const line = `${new Date().toLocaleTimeString()} ${JSON.stringify(entry)}`;
+    pushCappedSample(this.metricsLogLines, line, 120);
+
+    if (this.metricsUi?.output) {
+      this.metricsUi.output.textContent = this.metricsLogLines.join("\n");
+      this.metricsUi.output.scrollTop = this.metricsUi.output.scrollHeight;
+    }
+  }
+
+  logMetricsSummary() {
+    const now = Date.now();
+    const sinceLastMs = now - this.metrics.lastSummaryAt;
+    const minutes = sinceLastMs / 60000;
+    const correctionRate =
+      minutes > 0 ? this.metrics.correctionCount / minutes : 0;
+    const p95Drift = percentile(this.metrics.driftSamplesSec, 0.95);
+    const medianSyncMs = percentile(this.metrics.syncIntervalsMs, 0.5);
+    const health = getHealthStatus({
+      driftP95Sec: p95Drift,
+      correctionPerMin: correctionRate,
+      staleDrops: this.metrics.staleCommandDrops,
+    });
+
+    const summary = {
+      role: this.isHost ? "host" : "viewer",
+      uptimeSec: Math.floor((now - this.metrics.startedAt) / 1000),
+      driftP95Sec: p95Drift,
+      correctionPerMin: Number(correctionRate.toFixed(2)),
+      correctionCount: this.metrics.correctionCount,
+      staleDrops: this.metrics.staleCommandDrops,
+      recvSync: this.metrics.receivedSyncCount,
+      recvSeek: this.metrics.receivedSeekCount,
+      hostSyncMedianMs: medianSyncMs,
+      hostSyncSamples: this.metrics.syncIntervalsMs.length,
+      driftSamples: this.metrics.driftSamplesSec.length,
+      health: health.label,
+    };
+
+    if (this.healthBadge) {
+      this.healthBadge.textContent = health.label;
+      this.healthBadge.style.background =
+        health.tone === "good"
+          ? "rgba(34,197,94,0.18)"
+          : health.tone === "warn"
+            ? "rgba(245,158,11,0.18)"
+            : health.tone === "bad"
+              ? "rgba(239,68,68,0.18)"
+              : "rgba(255,255,255,0.12)";
+      this.healthBadge.style.borderColor =
+        health.tone === "good"
+          ? "rgba(34,197,94,0.45)"
+          : health.tone === "warn"
+            ? "rgba(245,158,11,0.45)"
+            : health.tone === "bad"
+              ? "rgba(239,68,68,0.45)"
+              : "rgba(255,255,255,0.16)";
+      this.healthBadge.style.color =
+        health.tone === "good"
+          ? "#bbf7d0"
+          : health.tone === "warn"
+            ? "#fde68a"
+            : health.tone === "bad"
+              ? "#fecaca"
+              : "#dbe6ff";
+    }
+
+    console.info("[sync-metrics]", summary);
+    this.appendMetricsLog(summary);
+
+    this.metrics.lastSummaryAt = now;
   }
 
   // 2) Implement secure sendToPlayer method
@@ -84,6 +316,16 @@ class WatchPartySync {
 
     const sentAt = Date.now();
 
+    if (action === "sync") {
+      if (this.metrics.hostSyncSentAt) {
+        pushCappedSample(
+          this.metrics.syncIntervalsMs,
+          sentAt - this.metrics.hostSyncSentAt,
+        );
+      }
+      this.metrics.hostSyncSentAt = sentAt;
+    }
+
     // Throttling: 800ms for time sync, immediate for play/pause/seek
     const throttleMs = action === "sync" ? 800 : 0;
     if (sentAt - this.lastBroadcastAt < throttleMs) {
@@ -117,6 +359,7 @@ class WatchPartySync {
 
     // Stale command filtering (7 seconds)
     if (sentAt && now - sentAt > 7000) {
+      this.metrics.staleCommandDrops += 1;
       console.warn("WatchPartySync: ignoring stale command:", command);
       return;
     }
@@ -140,11 +383,14 @@ class WatchPartySync {
           this.sendToPlayer("pause");
           break;
         case "seek":
+          this.metrics.receivedSeekCount += 1;
           this.sendToPlayer("seek", { time: Math.floor(adjustedTime) });
           this.lastKnownHostTime = adjustedTime;
           break;
         case "sync":
-          this.sendToPlayer("seek", { time: Math.floor(adjustedTime) });
+          this.metrics.receivedSyncCount += 1;
+          // Soft sync update: keep host time locally and let drift correction
+          // decide if/when an actual seek is required.
           this.lastKnownHostTime = adjustedTime;
           break;
         case "mute":
@@ -297,7 +543,7 @@ class WatchPartySync {
         case "timeupdate":
           // Periodic sync for drift correction
           this.lastKnownHostTime = currentTime;
-          if (this.isHost && Date.now() - this.lastBroadcastAt > 800) {
+          if (this.isHost && Date.now() - this.lastBroadcastAt > 1200) {
             this.broadcastAction("sync", currentTime);
           }
           break;
@@ -414,8 +660,10 @@ class WatchPartySync {
         this.getStatus()
           .then((status) => {
             const drift = Math.abs(status.currentTime - this.lastKnownHostTime);
+            pushCappedSample(this.metrics.driftSamplesSec, drift);
             if (drift > 1.1) {
               // 1.1 second threshold
+              this.metrics.correctionCount += 1;
               console.log("WatchPartySync: correcting drift:", drift);
               this.isSyncing = true;
               this.seek(this.lastKnownHostTime);
@@ -445,6 +693,12 @@ class WatchPartySync {
     }
     if (this.pendingStatusTimeout) {
       clearTimeout(this.pendingStatusTimeout);
+    }
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+    }
+    if (this.metricsUi?.root) {
+      this.metricsUi.root.remove();
     }
     this.pendingStatusResolve = null;
   }
