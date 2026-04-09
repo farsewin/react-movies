@@ -15,7 +15,7 @@ const VIEWER_DRIFT_CHECK_INTERVAL_MS = 2500;
 const MOBILE_VIEWER_DRIFT_CHECK_INTERVAL_MS = 1250;
 const VIEWER_DRIFT_THRESHOLD_SEC = 1.1;
 const MOBILE_VIEWER_DRIFT_THRESHOLD_SEC = 0.5;
-const VIEWER_CORRECTION_COOLDOWN_MS = 7000;
+const VIEWER_CORRECTION_COOLDOWN_MS = 12000;
 
 const debugLog = () => {};
 
@@ -410,7 +410,9 @@ class WatchPartySync {
           this.metrics.receivedSyncCount += 1;
           // Soft sync update: keep host time locally and let drift correction
           // decide if/when an actual seek is required.
-          this.lastKnownHostTime = adjustedTime;
+          if (adjustedTime > this.lastKnownHostTime) {
+            this.lastKnownHostTime = adjustedTime;
+          }
           break;
         case "mute":
           this.sendToPlayer("mute", { muted: command.muted });
@@ -708,8 +710,10 @@ class WatchPartySync {
           const drift = status.currentTime - this.lastKnownHostTime;
           const absDrift = Math.abs(drift);
           pushCappedSample(this.metrics.driftSamplesSec, absDrift);
+          const viewerIsBehind = drift < -this.driftThresholdSec;
+          const viewerWayAhead = drift > 3.0;
 
-          if (absDrift > this.driftThresholdSec) {
+          if (viewerIsBehind || viewerWayAhead) {
             this.metrics.correctionCount += 1;
             this.lastCorrectionAt = Date.now();
             console.log("WatchPartySync: correcting drift:", drift);
