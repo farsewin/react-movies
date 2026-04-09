@@ -15,6 +15,7 @@ const VIEWER_DRIFT_CHECK_INTERVAL_MS = 2500;
 const MOBILE_VIEWER_DRIFT_CHECK_INTERVAL_MS = 1250;
 const VIEWER_DRIFT_THRESHOLD_SEC = 1.1;
 const MOBILE_VIEWER_DRIFT_THRESHOLD_SEC = 0.5;
+const VIEWER_CORRECTION_COOLDOWN_MS = 7000;
 
 const debugLog = () => {};
 
@@ -79,6 +80,7 @@ class WatchPartySync {
     this.maxRetries = 5;
     this.retryDelay = 350;
     this.isSyncing = false; // Add isSyncing property for UI feedback
+    this.lastCorrectionAt = 0;
     this.metricsInterval = null;
     this.metricsUi = null;
     this.metricsLogLines = [];
@@ -680,8 +682,14 @@ class WatchPartySync {
             const drift = Math.abs(status.currentTime - this.lastKnownHostTime);
             pushCappedSample(this.metrics.driftSamplesSec, drift);
             if (drift > this.driftThresholdSec) {
+              const now = Date.now();
+              if (now - this.lastCorrectionAt < VIEWER_CORRECTION_COOLDOWN_MS) {
+                return;
+              }
+
               // Mobile viewers use a tighter threshold to correct drift sooner.
               this.metrics.correctionCount += 1;
+              this.lastCorrectionAt = now;
               console.log("WatchPartySync: correcting drift:", drift);
               this.isSyncing = true;
               this.seek(this.lastKnownHostTime);
