@@ -71,6 +71,7 @@ class WatchPartySync {
     this.allowedOrigins = VIDFAST_ORIGINS;
     this.lastBroadcastAt = 0;
     this.pendingStatusResolve = null;
+    this.pendingStatusReject = null;
     this.pendingStatusTimeout = null;
     this.isApplyingRemoteCommand = false;
     this.lastKnownHostTime = 0;
@@ -81,6 +82,7 @@ class WatchPartySync {
     this.retryDelay = 350;
     this.isSyncing = false; // Add isSyncing property for UI feedback
     this.lastCorrectionAt = 0;
+    this._driftCheckInFlight = false;
     this.metricsInterval = null;
     this.metricsUi = null;
     this.metricsLogLines = [];
@@ -640,72 +642,105 @@ class WatchPartySync {
     if (!this.iframe?.contentWindow) {
       throw new Error("Iframe not ready");
     }
-    return new Promise((resolve, reject) => {
-      // Clear any pending request
-      if (this.pendingStatusTimeout) {
-        clearTimeout(this.pendingStatusTimeout);
-      }
 
+    // Prevent overlapping pending status requests.
+    if (this.pendingStatusReject) {
+      this.pendingStatusReject(new Error("Status request superseded"));
+      this.pendingStatusResolve = null;
+      this.pendingStatusReject = null;
+    }
+
+    if (this.pendingStatusTimeout) {
+      clearTimeout(this.pendingStatusTimeout);
+      this.pendingStatusTimeout = null;
+    }
+
+    return new Promise((resolve, reject) => {
       this.pendingStatusResolve = resolve;
+      this.pendingStatusReject = reject;
 
       // Send status request
       this.sendToPlayer("getStatus");
 
       // Set timeout
       this.pendingStatusTimeout = setTimeout(() => {
+        const timeoutReject = this.pendingStatusReject;
         this.pendingStatusResolve = null;
-        reject(new Error("Status request timeout"));
-      }, 3000);
+        this.pendingStatusReject = null;
+        this.pendingStatusTimeout = null;
+        if (timeoutReject) {
+          timeoutReject(new Error("Status request timeout"));
+        }
+      }, 2000);
     });
   }
 
   // Handle status response
   handleStatusResponse(status) {
     if (this.pendingStatusResolve) {
-      this.pendingStatusResolve(status);
+      const resolve = this.pendingStatusResolve;
       this.pendingStatusResolve = null;
+      this.pendingStatusReject = null;
       if (this.pendingStatusTimeout) {
         clearTimeout(this.pendingStatusTimeout);
         this.pendingStatusTimeout = null;
       }
+      resolve(status);
     }
   }
 
   // 11) Periodic drift correction
   startDriftCorrection() {
     this.driftInterval = setInterval(() => {
-      if (!this.isHost && this.iframe?.contentWindow) {
-        // For viewers, check if we're significantly behind host
-        // Only run drift correction if iframe is ready
-        this.getStatus()
-          .then((status) => {
-            const drift = Math.abs(status.currentTime - this.lastKnownHostTime);
-            pushCappedSample(this.metrics.driftSamplesSec, drift);
-            if (drift > this.driftThresholdSec) {
-              const now = Date.now();
-              if (now - this.lastCorrectionAt < VIEWER_CORRECTION_COOLDOWN_MS) {
-                return;
-              }
-
-              // Mobile viewers use a tighter threshold to correct drift sooner.
-              this.metrics.correctionCount += 1;
-              this.lastCorrectionAt = now;
-              console.log("WatchPartySync: correcting drift:", drift);
-              this.isSyncing = true;
-              this.seek(this.lastKnownHostTime);
-              setTimeout(() => (this.isSyncing = false), 1000);
-            }
-          })
-          .catch((error) => {
-            // Ignore errors during drift correction (iframe not ready, timeout, etc.)
-            if (error.message !== "Iframe not ready") {
-              console.debug(
-                "WatchPartySync: drift correction skipped:",
-                error.message,
-              );
-            }
-          });
+      if (
+        this.isHost ||
+        !this.iframe?.contentWindow ||
+        this._driftCheckInFlight ||
+        Date.now() - this.lastCorrectionAt < VIEWER_CORRECTION_COOLDOWN_MS
+      ) {
+        return;
       }
+
+      this._driftCheckInFlight = true;
+
+      this.getStatus()
+        .then((status) => {
+          const drift = status.currentTime - this.lastKnownHostTime;
+          const absDrift = Math.abs(drift);
+          pushCappedSample(this.metrics.driftSamplesSec, absDrift);
+
+          if (absDrift > this.driftThresholdSec) {
+            this.metrics.correctionCount += 1;
+            this.lastCorrectionAt = Date.now();
+            console.log("WatchPartySync: correcting drift:", drift);
+
+            this.isApplyingRemoteCommand = true;
+            this.isSyncing = true;
+            this.sendToPlayer("seek", {
+              time: Math.floor(this.lastKnownHostTime),
+            });
+
+            setTimeout(() => {
+              this.isApplyingRemoteCommand = false;
+              this.isSyncing = false;
+            }, 600);
+          }
+        })
+        .catch((error) => {
+          // Ignore errors during drift correction (iframe not ready, timeout, etc.)
+          if (
+            error.message !== "Iframe not ready" &&
+            error.message !== "Status request superseded"
+          ) {
+            console.debug(
+              "WatchPartySync: drift correction skipped:",
+              error.message,
+            );
+          }
+        })
+        .finally(() => {
+          this._driftCheckInFlight = false;
+        });
     }, this.driftCheckIntervalMs);
   }
 
@@ -727,6 +762,8 @@ class WatchPartySync {
       this.metricsUi.root.remove();
     }
     this.pendingStatusResolve = null;
+    this.pendingStatusReject = null;
+    this._driftCheckInFlight = false;
   }
 }
 
