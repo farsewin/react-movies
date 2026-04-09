@@ -9,6 +9,13 @@ const VIDFAST_ORIGINS = [
   "https://vidfast.xyz",
 ];
 
+const HOST_SYNC_GATE_MS = 1200;
+const HOST_SYNC_THROTTLE_MS = 800;
+const VIEWER_DRIFT_CHECK_INTERVAL_MS = 2500;
+const MOBILE_VIEWER_DRIFT_CHECK_INTERVAL_MS = 1250;
+const VIEWER_DRIFT_THRESHOLD_SEC = 1.1;
+const MOBILE_VIEWER_DRIFT_THRESHOLD_SEC = 0.5;
+
 const debugLog = () => {};
 
 const pushCappedSample = (arr, value, limit = 300) => {
@@ -50,6 +57,14 @@ class WatchPartySync {
     this.transport = transport;
     this.isHost = isHost;
     this.isMobile = isMobile;
+    this.driftCheckIntervalMs =
+      this.isMobile && !this.isHost
+        ? MOBILE_VIEWER_DRIFT_CHECK_INTERVAL_MS
+        : VIEWER_DRIFT_CHECK_INTERVAL_MS;
+    this.driftThresholdSec =
+      this.isMobile && !this.isHost
+        ? MOBILE_VIEWER_DRIFT_THRESHOLD_SEC
+        : VIEWER_DRIFT_THRESHOLD_SEC;
 
     // Internal state
     this.allowedOrigins = VIDFAST_ORIGINS;
@@ -326,8 +341,8 @@ class WatchPartySync {
       this.metrics.hostSyncSentAt = sentAt;
     }
 
-    // Throttling: 800ms for time sync, immediate for play/pause/seek
-    const throttleMs = action === "sync" ? 800 : 0;
+    // Throttling for periodic time sync, immediate for play/pause/seek
+    const throttleMs = action === "sync" ? HOST_SYNC_THROTTLE_MS : 0;
     if (sentAt - this.lastBroadcastAt < throttleMs) {
       debugLog("WatchPartySync: throttled, skipping broadcast", {
         throttleMs,
@@ -543,7 +558,10 @@ class WatchPartySync {
         case "timeupdate":
           // Periodic sync for drift correction
           this.lastKnownHostTime = currentTime;
-          if (this.isHost && Date.now() - this.lastBroadcastAt > 1200) {
+          if (
+            this.isHost &&
+            Date.now() - this.lastBroadcastAt > HOST_SYNC_GATE_MS
+          ) {
             this.broadcastAction("sync", currentTime);
           }
           break;
@@ -661,8 +679,8 @@ class WatchPartySync {
           .then((status) => {
             const drift = Math.abs(status.currentTime - this.lastKnownHostTime);
             pushCappedSample(this.metrics.driftSamplesSec, drift);
-            if (drift > 1.1) {
-              // 1.1 second threshold
+            if (drift > this.driftThresholdSec) {
+              // Mobile viewers use a tighter threshold to correct drift sooner.
               this.metrics.correctionCount += 1;
               console.log("WatchPartySync: correcting drift:", drift);
               this.isSyncing = true;
@@ -680,7 +698,7 @@ class WatchPartySync {
             }
           });
       }
-    }, 2500); // Every 2.5 seconds
+    }, this.driftCheckIntervalMs);
   }
 
   // 14) Cleanup

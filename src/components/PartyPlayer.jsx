@@ -49,6 +49,8 @@ const PartyPlayer = forwardRef(
     const watchPartyRef = useRef(null);
     const roomStateRef = useRef(roomState);
     const hasInitialSynced = useRef(false);
+    const lastRemoteSyncAtRef = useRef(0);
+    const lastRemotePlaybackStatusRef = useRef(null);
     const subtitleEngineRef = useRef(null);
     const subtitleProviderRef = useRef(null);
     const [subtitleStatus, setSubtitleStatus] = useState(null);
@@ -277,7 +279,14 @@ const PartyPlayer = forwardRef(
             action: cmd.action,
             time: cmd.time,
           });
-          syncRoomState(roomDocId, cmd.action, cmd.time, {
+          const playbackStatus =
+            cmd.action === "sync"
+              ? roomStateRef.current?.playback_status === "pause"
+                ? "pause"
+                : "play"
+              : cmd.action;
+
+          syncRoomState(roomDocId, playbackStatus, cmd.time, {
             sentAt: cmd.sentAt,
           });
           debugLog("PartyPlayer: syncRoomState called successfully");
@@ -382,6 +391,26 @@ const PartyPlayer = forwardRef(
           ? new Date(roomState.last_sync_at).getTime()
           : Date.now(),
       };
+
+      const nextSentAt = remoteCmd.sentAt || Date.now();
+      if (nextSentAt <= lastRemoteSyncAtRef.current) {
+        return;
+      }
+
+      const rawStatus = roomState.playback_status;
+      const previousStatus = lastRemotePlaybackStatusRef.current;
+      const normalizedStatus =
+        rawStatus === "play" || rawStatus === "pause" || rawStatus === "seek"
+          ? rawStatus
+          : "sync";
+
+      remoteCmd.action =
+        previousStatus && normalizedStatus === previousStatus
+          ? "sync"
+          : normalizedStatus;
+
+      lastRemoteSyncAtRef.current = nextSentAt;
+      lastRemotePlaybackStatusRef.current = normalizedStatus;
 
       debugLog(
         "PartyPlayer: forwarding remoteCmd to WatchPartySync",
