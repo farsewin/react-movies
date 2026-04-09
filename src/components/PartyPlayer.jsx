@@ -296,11 +296,13 @@ const PartyPlayer = forwardRef(
       };
 
       // 2. Create the v3 sync engine instance
+      // Use desktop sync profile on mobile to avoid over-correcting seeks
+      // that can make low-end Android playback feel like freezing.
       watchPartyRef.current = new WatchPartySync(
         iframeRef.current,
         transport,
         isHost,
-        isMobile,
+        false,
       );
 
       debugLog("PartyPlayer: WatchPartySync created", {
